@@ -34,7 +34,8 @@
 .depth-3 table { font-size: 0.8em; }
 .depth-4 table { font-size: 0.75em; }
 
-td.has-subtable, th.has-subtable {
+td.has-subtable, th.has-subtable,
+.table-cell-wrapper.has-subtable {
 	max-width: 360px;
 	overflow: auto !important;
 	background-color: var(--background-primary-alt);
@@ -43,17 +44,20 @@ td.has-subtable, th.has-subtable {
 	padding: 6px 8px !important;
 }
 
-td.has-subtable:hover, th.has-subtable:hover {
+td.has-subtable:hover, th.has-subtable:hover,
+.table-cell-wrapper.has-subtable:hover {
 	background-color: var(--background-modifier-hover);
 }
 
 .depth-2 td.has-subtable,
-.depth-2 th.has-subtable {
+.depth-2 th.has-subtable,
+.depth-2 .table-cell-wrapper.has-subtable {
 	max-width: 300px;
 }
 
 .depth-3 td.has-subtable,
-.depth-3 th.has-subtable {
+.depth-3 th.has-subtable,
+.depth-3 .table-cell-wrapper.has-subtable {
 	max-width: 260px;
 }
 
