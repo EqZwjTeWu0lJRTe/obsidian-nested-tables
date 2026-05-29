@@ -1,5 +1,5 @@
 .nested-table-container {
-	margin: 8px 0;
+	margin: 4px 0;
 	overflow-x: auto;
 	overflow-y: hidden;
 	padding: 8px;
@@ -7,9 +7,8 @@
 	max-width: 340px;
 	min-width: 180px;
 	border: 1px solid var(--background-modifier-border);
-	border-radius: 4px;
-	background-color: var(--background-primary);
-	box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+	border-radius: 6px;
+	background-color: var(--background-primary-alt);
 }
 
 .nested-table-container table {
@@ -21,18 +20,18 @@
 
 .nested-table-container th {
 	background-color: var(--background-secondary-alt);
-	border: 1px solid var(--background-modifier-border);
-	padding: 5px 12px;
+	border: 1px solid var(--background-modifier-border-hover);
+	padding: 4px 10px;
 	font-weight: var(--font-bold);
 	text-align: left;
 	white-space: nowrap;
 }
 
 .nested-table-container td {
-	border: 1px solid var(--background-modifier-border);
-	padding: 5px 12px;
+	border: 1px solid var(--background-modifier-border-hover);
+	padding: 4px 10px;
 	vertical-align: top;
-	white-space: nowrap;
+	white-space: normal !important;
 }
 
 .depth-0 table { font-size: 1em; }
@@ -45,7 +44,7 @@ td.has-subtable, th.has-subtable,
 .table-cell-wrapper.has-subtable {
 	background-color: var(--background-secondary);
 	cursor: default;
-	padding: 12px 14px !important;
+	padding: 10px 12px !important;
 	min-width: 0;
 	vertical-align: top;
 }
