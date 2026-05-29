@@ -23,6 +23,7 @@ interface TableData {
 	headers: string[];
 	rows: string[][];
 	subTables: SubTableRef[];
+	filePath?: string;
 }
 
 type NestedTableData = TableData;
@@ -109,6 +110,8 @@ async function loadNestedTable(
 
 		visited.add(resolvedPath);
 
+		const result: NestedTableData = { headers, rows, subTables, filePath: resolvedPath };
+
 		for (let i = 0; i < dataLines.length; i++) {
 			const line = dataLines[i] as string;
 			const cells = line
@@ -137,7 +140,7 @@ async function loadNestedTable(
 			rows.push(row);
 		}
 
-		return { headers, rows, subTables };
+		return result;
 	} catch (err) {
 		const msg =
 			err instanceof Error ? err.message : "未知错误";
@@ -195,6 +198,38 @@ async function preloadEnriched(
 	}
 
 	const results = await Promise.all(subPreloads);
+
+	const headerBar = container.createDiv({ cls: "nt-header-bar" });
+	const title = headerBar.createSpan({ cls: "nt-header-title" });
+	title.textContent = data.filePath || sourcePath;
+
+	const btnGroup = headerBar.createDiv({ cls: "nt-header-buttons" });
+
+	const editBtn = btnGroup.createEl("button", {
+		cls: "clickable-icon nt-toolbar-btn",
+		title: "编辑此表格",
+	});
+	editBtn.innerHTML = "✏️";
+	editBtn.addEventListener("click", (e) => {
+		e.stopPropagation();
+		const filePath = data.filePath || sourcePath;
+		new NestedTableEditModal(app, filePath).open();
+	});
+
+	const openBtn = btnGroup.createEl("button", {
+		cls: "clickable-icon nt-toolbar-btn",
+		title: "分窗口打开笔记",
+	});
+	openBtn.innerHTML = "📄";
+	openBtn.addEventListener("click", (e) => {
+		e.stopPropagation();
+		const filePath = data.filePath || sourcePath;
+		const file = vault.getAbstractFileByPath(filePath);
+		if (file instanceof TFile) {
+			const leaf = app.workspace.splitActiveLeaf();
+			leaf.openFile(file);
+		}
+	});
 
 	const table = container.createEl("table");
 	const thead = table.createEl("thead");
@@ -276,17 +311,23 @@ class NestedTableEditModal extends Modal {
 		rows: string[][];
 	} | null> {
 		try {
-			const resolved = this.app.metadataCache.getFirstLinkpathDest(
-				this.sourcePath,
-				this.getActiveFilePath()
-			);
-			if (!resolved) {
-				new Notice(`未找到文件: ${this.sourcePath}`);
-				return null;
+			let file: TFile | null = null;
+
+			if (this.sourcePath.includes("/") || this.sourcePath.endsWith(".md")) {
+				const f = this.app.vault.getAbstractFileByPath(this.sourcePath);
+				if (f instanceof TFile) file = f;
+			} else {
+				const resolved = this.app.metadataCache.getFirstLinkpathDest(
+					this.sourcePath,
+					this.getActiveFilePath()
+				);
+				if (resolved) {
+					const f = this.app.vault.getAbstractFileByPath(resolved.path);
+					if (f instanceof TFile) file = f;
+				}
 			}
 
-			const file = this.app.vault.getAbstractFileByPath(resolved.path);
-			if (!(file instanceof TFile)) {
+			if (!file) {
 				new Notice(`未找到文件: ${this.sourcePath}`);
 				return null;
 			}
@@ -335,6 +376,16 @@ class NestedTableEditModal extends Modal {
 			while (padded.length < colCount) padded.push(" ");
 			return padded;
 		});
+		let filterText = "";
+
+		const filterInput = container.createEl("input", {
+			cls: "nt-edit-filter",
+			type: "text",
+			placeholder: "过滤行...",
+		});
+		filterInput.style.marginBottom = "8px";
+		filterInput.style.width = "100%";
+		filterInput.style.boxSizing = "border-box";
 
 		const gridContainer = container.createDiv({ cls: "edit-grid" });
 
@@ -356,16 +407,25 @@ class NestedTableEditModal extends Modal {
 
 			for (let i = 0; i < currentRows.length; i++) {
 				const row = currentRows[i] || [];
+				const match = !filterText || row.some((cell) =>
+					cell.toLowerCase().includes(filterText.toLowerCase())
+				);
 				for (let j = 0; j < totalCols; j++) {
 					const input = gridContainer.createEl("input");
 					input.type = "text";
 					input.value = row[j] || " ";
+					if (!match) input.classList.add("nt-row-filtered");
 					input.addEventListener("input", () => {
 						this.hasUnsavedChanges = true;
 					});
 				}
 			}
 		};
+
+		filterInput.addEventListener("input", () => {
+			filterText = filterInput.value;
+			renderGrid();
+		});
 
 		renderGrid();
 
@@ -426,43 +486,44 @@ class NestedTableEditModal extends Modal {
 
 		const saveBtn = actions.createEl("button", { text: "保存并关闭" });
 		saveBtn.addEventListener("click", async () => {
-			const allInputs = gridContainer.querySelectorAll("input");
-			const headerCount = currentHeaders.length;
+			const allInputs = Array.from(gridContainer.querySelectorAll("input"));
+			const totalCols = currentHeaders.length;
 
-			const resolvedHeaders: string[] = [];
-			allInputs.forEach((input, idx) => {
-				if (idx < headerCount) {
-					resolvedHeaders.push(input.value || " ");
+			for (let i = 0; i < allInputs.length; i++) {
+				const inp = allInputs[i] as HTMLInputElement;
+				if (i < totalCols) {
+					currentHeaders[i] = inp.value || " ";
+				} else {
+					const rowIdx = Math.floor((i - totalCols) / totalCols);
+					const colIdx = (i - totalCols) % totalCols;
+					if (!currentRows[rowIdx]) currentRows[rowIdx] = [];
+					currentRows[rowIdx][colIdx] = inp.value || " ";
 				}
-			});
-
-			const resolvedRows: string[][] = [];
-			for (let idx = headerCount; idx < allInputs.length; idx += headerCount) {
-				const row: string[] = [];
-				for (let j = 0; j < headerCount; j++) {
-					const cellInput = allInputs[idx + j] as HTMLInputElement;
-					row.push(cellInput ? cellInput.value || " " : " ");
-				}
-				resolvedRows.push(row);
 			}
 
-			await this.saveToFile(resolvedHeaders, resolvedRows);
+			await this.saveToFile([...currentHeaders], currentRows.map(r => [...r]));
 		});
 	}
 
 	private async saveToFile(headers: string[], rows: string[][]) {
 		try {
-			const resolved = this.app.metadataCache.getFirstLinkpathDest(
-				this.sourcePath,
-				this.getActiveFilePath()
-			);
-			if (!resolved) {
-				new Notice(`未找到文件: ${this.sourcePath}`);
-				return;
+			let file: TFile | null = null;
+
+			if (this.sourcePath.includes("/") || this.sourcePath.endsWith(".md")) {
+				const f = this.app.vault.getAbstractFileByPath(this.sourcePath);
+				if (f instanceof TFile) file = f;
+			} else {
+				const resolved = this.app.metadataCache.getFirstLinkpathDest(
+					this.sourcePath,
+					this.getActiveFilePath()
+				);
+				if (resolved) {
+					const f = this.app.vault.getAbstractFileByPath(resolved.path);
+					if (f instanceof TFile) file = f;
+				}
 			}
 
-			const file = this.app.vault.getAbstractFileByPath(resolved.path);
-			if (!(file instanceof TFile)) {
+			if (!file) {
 				new Notice(`未找到文件: ${this.sourcePath}`);
 				return;
 			}
@@ -507,6 +568,114 @@ class NestedTableEditModal extends Modal {
 	}
 }
 
+class FileSearchModal extends Modal {
+	private onSelect: (name: string) => void;
+
+	constructor(app: App, onSelect: (name: string) => void) {
+		super(app);
+		this.onSelect = onSelect;
+		this.titleEl.textContent = "选择或创建笔记插入表格引用";
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+
+		const searchInput = contentEl.createEl("input", {
+			type: "text",
+			placeholder: "搜索笔记名称...",
+		});
+		searchInput.style.width = "100%";
+		searchInput.style.boxSizing = "border-box";
+		searchInput.style.marginBottom = "8px";
+		searchInput.style.padding = "6px 8px";
+		searchInput.focus();
+		searchInput.addEventListener("input", () => doRender(searchInput.value));
+
+		const listEl = contentEl.createDiv();
+
+		const createNew = contentEl.createDiv({ cls: "nt-file-search-create" });
+		createNew.textContent = "+ 创建新笔记";
+		createNew.addEventListener("click", () => {
+			const name = searchInput.value.trim();
+			if (!name) {
+				new Notice("请输入笔记名称");
+				return;
+			}
+			this.createAndSelect(name);
+		});
+
+		const doRender = (query: string) => {
+			listEl.empty();
+
+			const files = this.app.vault.getMarkdownFiles();
+			const q = query.toLowerCase();
+			const matched = q
+				? files.filter((f) => f.basename.toLowerCase().includes(q))
+				: files.slice(0, 50);
+
+			if (matched.length === 0) {
+				listEl.createDiv({
+					text: q ? "未找到匹配笔记" : "（输入关键词搜索）",
+					cls: "nt-file-search-result",
+				});
+				return;
+			}
+
+			for (const file of matched) {
+				const el = listEl.createDiv({ cls: "nt-file-search-result" });
+				el.textContent = file.basename;
+				el.dataset.path = file.path;
+				el.addEventListener("click", () => {
+					this.onSelect(file.basename);
+					this.close();
+				});
+			}
+		};
+
+		doRender("");
+
+		searchInput.addEventListener("keydown", (e) => {
+			if (e.key === "Enter") {
+				e.preventDefault();
+				const name = searchInput.value.trim();
+				if (!name) return;
+				const exact = this.app.vault.getMarkdownFiles().find(
+					(f) => f.basename.toLowerCase() === name.toLowerCase()
+				);
+				if (exact) {
+					this.onSelect(exact.basename);
+					this.close();
+				} else {
+					this.createAndSelect(name);
+				}
+			}
+		});
+	}
+
+	private async createAndSelect(name: string) {
+		const template = `| 列1 | 列2 |
+|---|---|
+|  |  |`;
+		try {
+			const file = await this.app.vault.create(
+				`${name}.md`,
+				template
+			);
+			new Notice(`已创建笔记: ${name}`);
+			this.onSelect(file.basename);
+			this.close();
+		} catch (err) {
+			new Notice(`创建失败: ${err instanceof Error ? err.message : "未知错误"}`);
+		}
+	}
+
+	onClose() {
+		const { contentEl } = this;
+		contentEl.empty();
+	}
+}
+
 export default class NestedTablesPlugin extends Plugin {
 	settings!: NestedTableSettings;
 	private mutationObserver: MutationObserver | null = null;
@@ -524,11 +693,9 @@ export default class NestedTablesPlugin extends Plugin {
 			id: "insert-table-ref",
 			name: "插入表格引用",
 			editorCallback: (editor) => {
-				const activeFile = this.app.workspace.getActiveFile();
-				if (activeFile) {
-					const fileName = activeFile.basename;
-					editor.replaceSelection(`@table:${fileName}`);
-				}
+				new FileSearchModal(this.app, (name) => {
+					editor.replaceSelection(`@table:${name}`);
+				}).open();
 			},
 		});
 

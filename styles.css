@@ -152,3 +152,79 @@
 	border-radius: 4px;
 	cursor: pointer;
 }
+
+.nt-header-bar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 2px 4px;
+	margin-bottom: 4px;
+	gap: 8px;
+}
+
+.nt-header-title {
+	font-size: 0.8em;
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	flex: 1;
+}
+
+.nt-header-buttons {
+	display: flex;
+	gap: 2px;
+	flex-shrink: 0;
+}
+
+.nt-toolbar-btn {
+	background: none;
+	border: none;
+	cursor: pointer;
+	padding: 2px 4px;
+	font-size: 14px;
+	line-height: 1;
+	border-radius: 4px;
+	opacity: 0.3;
+	transition: opacity 0.15s;
+}
+
+.nested-table-container:hover .nt-toolbar-btn {
+	opacity: 0.8;
+}
+
+.nt-toolbar-btn:hover {
+	opacity: 1 !important;
+	background-color: var(--background-modifier-hover);
+}
+
+.nt-row-filtered {
+	opacity: 0.25;
+}
+
+.nt-file-search-result {
+	padding: 6px 12px;
+	cursor: pointer;
+	border-bottom: 1px solid var(--background-modifier-border);
+	font-size: 0.9em;
+}
+
+.nt-file-search-result:hover,
+.nt-file-search-result.is-selected {
+	background-color: var(--background-modifier-hover);
+}
+
+.nt-file-search-create {
+	margin: 8px 12px;
+	padding: 8px;
+	border: 1px dashed var(--interactive-accent);
+	border-radius: 4px;
+	text-align: center;
+	color: var(--interactive-accent);
+	cursor: pointer;
+	font-size: 0.9em;
+}
+
+.nt-file-search-create:hover {
+	background-color: var(--background-modifier-hover);
+}
