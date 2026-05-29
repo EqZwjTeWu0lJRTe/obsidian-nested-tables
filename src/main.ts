@@ -1,15 +1,13 @@
 import {
 	App,
-	Editor,
 	MarkdownPostProcessorContext,
-	MarkdownView,
 	Modal,
 	Notice,
 	Plugin,
 	TFile,
 	Vault,
 } from "obsidian";
-import { EditorView } from "@codemirror/view";
+
 
 import {
 	DEFAULT_SETTINGS,
@@ -556,32 +554,15 @@ class NestedTableEditModal extends Modal {
 			const headerLine = "|" + headers.join("|") + "|";
 			const newTableStr = [headerLine, sepLine, ...dataLines].join("\n");
 
-			const view = (this.app.workspace.activeEditor?.editor as any)?.cm as EditorView | undefined;
-			if (view) {
-				const tableRegex = /\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/;
-				const docStr = view.state.doc.toString();
-				const docMatch = docStr.match(tableRegex);
-				if (!docMatch || docMatch.index === undefined) {
-					new Notice("文件中没有找到 Markdown 表格");
-					return;
-				}
-				view.dispatch({
-					changes: {
-						from: docMatch.index,
-						to: docMatch.index + docMatch[0].length,
-						insert: newTableStr,
-					},
-				});
-			} else {
-				const oldContent = await this.app.vault.read(file);
-				const tableRegex = /\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/;
-				const newContent = oldContent.replace(tableRegex, newTableStr);
-				if (newContent === oldContent) {
-					new Notice("文件中没有找到 Markdown 表格");
-					return;
-				}
-				await this.app.vault.modify(file, newContent);
+			const oldContent = await this.app.vault.read(file);
+			const tableRegex = /\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/;
+			const newContent = oldContent.replace(tableRegex, newTableStr);
+			if (newContent === oldContent) {
+				new Notice("文件中没有找到 Markdown 表格");
+				return;
 			}
+
+			await this.app.vault.modify(file, newContent);
 
 			new Notice("保存成功");
 			this.hasUnsavedChanges = false;
@@ -773,9 +754,12 @@ export default class NestedTablesPlugin extends Plugin {
 		);
 
 		this.registerEvent(
-			this.app.vault.on("modify", () => {
+			this.app.vault.on("modify", (file: any) => {
 				this.dataCache.clear();
-				this.scheduleRefresh();
+				const activeFile = this.app.workspace.getActiveFile();
+				if (activeFile && file.path === activeFile.path) {
+					this.scheduleRefresh();
+				}
 			})
 		);
 
