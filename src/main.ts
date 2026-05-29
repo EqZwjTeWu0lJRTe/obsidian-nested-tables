@@ -422,12 +422,19 @@ class NestedTableEditModal extends Modal {
 			}
 		};
 
+		const scrollEl = document.querySelector(".cm-scroller, .markdown-preview-view");
+		const withScrollRestore = (fn: () => void) => {
+			const saved = scrollEl ? scrollEl.scrollTop : 0;
+			fn();
+			if (saved > 0) requestAnimationFrame(() => { if (scrollEl) scrollEl.scrollTop = saved; });
+		};
+
 		filterInput.addEventListener("input", () => {
 			filterText = filterInput.value;
-			renderGrid();
+			withScrollRestore(() => renderGrid());
 		});
 
-		renderGrid();
+		withScrollRestore(() => renderGrid());
 
 		const syncGridToArrays = () => {
 			const inputs = Array.from(gridContainer.querySelectorAll("input"));
@@ -451,7 +458,7 @@ class NestedTableEditModal extends Modal {
 		addRowBtn.addEventListener("click", () => {
 			syncGridToArrays();
 			currentRows.push(new Array(currentHeaders.length).fill(" "));
-			renderGrid();
+			withScrollRestore(() => renderGrid());
 			this.hasUnsavedChanges = true;
 		});
 
@@ -462,7 +469,7 @@ class NestedTableEditModal extends Modal {
 			for (const row of currentRows) {
 				row.push(" ");
 			}
-			renderGrid();
+			withScrollRestore(() => renderGrid());
 			this.hasUnsavedChanges = true;
 		});
 
@@ -474,7 +481,7 @@ class NestedTableEditModal extends Modal {
 				return;
 			}
 			currentRows.pop();
-			renderGrid();
+			withScrollRestore(() => renderGrid());
 			this.hasUnsavedChanges = true;
 		});
 
@@ -490,7 +497,7 @@ class NestedTableEditModal extends Modal {
 			for (const row of currentRows) {
 				row.splice(lastIdx, 1);
 			}
-			renderGrid();
+			withScrollRestore(() => renderGrid());
 			this.hasUnsavedChanges = true;
 		});
 
