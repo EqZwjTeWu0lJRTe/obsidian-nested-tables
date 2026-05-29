@@ -10,6 +10,7 @@ import {
 	Vault,
 } from "obsidian";
 import { EditorView } from "@codemirror/view";
+import { EditorSelection } from "@codemirror/state";
 import {
 	DEFAULT_SETTINGS,
 	NestedTableSettings,
@@ -567,28 +568,21 @@ class NestedTableEditModal extends Modal {
 			}
 
 			const refName = this.sourcePath.replace(/\.md$/, "").replace(/^.*\//, "");
-			let targetScrollPos: number | null = null;
 			const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
 			const cmView = (markdownView?.editor as any)?.cm as EditorView | null;
 
-			if (cmView) {
-				const doc = cmView.state.doc;
-				const searchStr = `@table:${refName}`;
-				const fullText = doc.toString();
-				const idx = fullText.indexOf(searchStr);
-				if (idx >= 0) {
-					targetScrollPos = idx;
-				}
-			}
-
 			await this.app.vault.modify(file, content);
 
-			if (cmView && targetScrollPos !== null) {
-				requestAnimationFrame(() => {
+			if (cmView) {
+				await new Promise(r => setTimeout(r, 0));
+				const fullText = cmView.state.doc.toString();
+				const newIdx = fullText.indexOf(`@table:${refName}`);
+				if (newIdx >= 0) {
 					cmView.dispatch({
-						effects: EditorView.scrollIntoView(targetScrollPos, { y: "center" }),
+						selection: EditorSelection.cursor(newIdx),
+						scrollIntoView: true,
 					});
-				});
+				}
 			}
 
 			new Notice("保存成功");
