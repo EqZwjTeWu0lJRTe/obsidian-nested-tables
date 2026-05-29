@@ -1,52 +1,71 @@
 .nested-table-container {
-	margin: 8px 0;
+	margin: 4px 0;
 	overflow-x: auto;
-	max-width: 100%;
+	overflow-y: hidden;
 }
 
 .nested-table-container table {
 	border-collapse: collapse;
-	width: 100%;
+	min-width: 100%;
+	width: auto;
 	font-size: var(--font-text-size);
-	table-layout: fixed;
 	word-break: break-word;
-}
-
-.nested-table-container th,
-.nested-table-container td {
-	border: 1px solid var(--background-modifier-border);
-	padding: 6px 8px;
-	vertical-align: top;
-	overflow: hidden;
 }
 
 .nested-table-container th {
 	background-color: var(--background-secondary-alt);
+	border: 1px solid var(--background-modifier-border);
+	padding: 4px 6px;
 	font-weight: var(--font-bold);
 	text-align: left;
+	white-space: nowrap;
+}
+
+.nested-table-container td {
+	border: 1px solid var(--background-modifier-border);
+	padding: 4px 6px;
+	vertical-align: top;
 }
 
 .depth-0 table { font-size: 1em; }
-.depth-1 table { font-size: 0.95em; }
-.depth-2 table { font-size: 0.9em; }
-.depth-3 table { font-size: 0.85em; }
-.depth-4 table { font-size: 0.8em; }
+.depth-1 table { font-size: 0.9em; }
+.depth-2 table { font-size: 0.85em; }
+.depth-3 table { font-size: 0.8em; }
+.depth-4 table { font-size: 0.75em; }
 
 td.has-subtable, th.has-subtable {
-	max-width: 360px;
-	overflow-x: auto;
+	max-width: 320px;
+	overflow: visible;
 	background-color: var(--background-primary-alt);
 	cursor: pointer;
-	transition: background-color 0.2s ease;
+	min-width: 0;
 }
 
 td.has-subtable:hover, th.has-subtable:hover {
 	background-color: var(--background-modifier-hover);
 }
 
-.depth-3 td.has-subtable,
-.depth-4 td.has-subtable {
+.depth-2 td.has-subtable,
+.depth-2 th.has-subtable {
 	max-width: 280px;
+}
+
+.depth-3 td.has-subtable,
+.depth-3 th.has-subtable {
+	max-width: 240px;
+}
+
+.nested-table-container {
+	max-width: 100%;
+	min-width: 160px;
+}
+
+.depth-2 .nested-table-container {
+	min-width: 140px;
+}
+
+.depth-3 .nested-table-container {
+	min-width: 120px;
 }
 
 .nt-unprocessed,
@@ -88,13 +107,13 @@ td.has-subtable:hover, th.has-subtable:hover {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	padding: 6px 12px;
-	margin-bottom: 8px;
+	padding: 4px 8px;
+	margin-bottom: 4px;
 	background-color: var(--background-secondary);
 	border: 1px solid var(--color-orange);
 	border-radius: 4px;
 	color: var(--color-orange);
-	font-size: 0.85em;
+	font-size: 0.8em;
 }
 
 .nested-table-edit-modal {
@@ -166,14 +185,13 @@ td.has-subtable:hover, th.has-subtable:hover {
 .nt-header-bar {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	padding: 2px 4px;
-	margin-bottom: 4px;
-	gap: 8px;
+	justify-content: flex-end;
+	margin-bottom: 2px;
+	min-height: 0;
 }
 
 .nt-header-title {
-	font-size: 0.8em;
+	font-size: 0.75em;
 	color: var(--text-muted);
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -189,7 +207,7 @@ td.has-subtable:hover, th.has-subtable:hover {
 
 .nt-header-buttons {
 	display: none;
-	gap: 2px;
+	gap: 1px;
 	flex-shrink: 0;
 }
 
@@ -201,10 +219,10 @@ td.has-subtable:hover, th.has-subtable:hover {
 	background: none;
 	border: none;
 	cursor: pointer;
-	padding: 2px 4px;
-	font-size: 14px;
+	padding: 1px 3px;
+	font-size: 12px;
 	line-height: 1;
-	border-radius: 4px;
+	border-radius: 3px;
 }
 
 .nt-toolbar-btn:hover {
