@@ -554,36 +554,31 @@ class NestedTableEditModal extends Modal {
 			);
 
 			const headerLine = "|" + headers.join("|") + "|";
-			const tableStr = [headerLine, sepLine, ...dataLines].join("\n");
+			const newTableStr = [headerLine, sepLine, ...dataLines].join("\n");
 
-			let content = await this.app.vault.read(file);
+			const oldContent = await this.app.vault.read(file);
 			const tableRegex = /\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/;
-			const tableMatch = content.match(tableRegex);
-			if (tableMatch) {
-				const fullMatch = tableMatch[0] as string;
-				content = content.replace(fullMatch, tableStr);
-			} else {
+			const oldMatch = oldContent.match(tableRegex);
+
+			if (!oldMatch || oldMatch.index === undefined) {
 				new Notice("文件中没有找到 Markdown 表格");
 				return;
 			}
 
-			const refName = this.sourcePath.replace(/\.md$/, "").replace(/^.*\//, "");
+			const view = (this.app.workspace.activeEditor?.editor as any)?.cm as EditorView | undefined;
+			if (view) {
+				const doc = view.state.doc.toString();
+				const oldStart = oldMatch.index;
+				const oldEnd = oldMatch.index + oldMatch[0].length;
 
-			const scrollEl = document.querySelector(".cm-scroller");
-			const savedTop = scrollEl ? scrollEl.scrollTop : 0;
+				view.dispatch({
+					changes: { from: oldStart, to: oldEnd, insert: newTableStr },
+				});
 
-			await this.app.vault.modify(file, content);
-
-			if (savedTop > 0) {
-				const el = document.querySelector(".cm-scroller, .markdown-preview-view") as HTMLElement | null;
-				if (!el) return;
-				const guard = () => {
-					if (el.scrollTop < savedTop - 10) el.scrollTop = savedTop;
-				};
-				el.addEventListener("scroll", guard, { once: true });
-				setTimeout(() => el.removeEventListener("scroll", guard), 400);
-				setTimeout(guard, 100);
-				setTimeout(guard, 250);
+				await this.app.vault.modify(file, view.state.doc.toString());
+			} else {
+				const newContent = oldContent.replace(oldMatch[0], newTableStr);
+				await this.app.vault.modify(file, newContent);
 			}
 
 			new Notice("保存成功");
