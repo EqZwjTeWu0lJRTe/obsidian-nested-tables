@@ -563,15 +563,31 @@ class NestedTableEditModal extends Modal {
 				return;
 			}
 
-			const scrollEl = document.querySelector(".cm-scroller, .markdown-preview-view");
-			const savedScroll = scrollEl ? scrollEl.scrollTop : 0;
+			const refName = this.sourcePath.replace(/\.md$/, "").replace(/^.*\//, "");
+			let targetRowIndex = -1;
+			const mainTable = document.querySelector("table.nt-main-table");
+			if (mainTable) {
+				const rows = mainTable.querySelectorAll("tbody tr");
+				for (let i = 0; i < rows.length; i++) {
+					const cell = rows[i]?.querySelector("td:nth-child(2)");
+					if (cell && cell.textContent?.includes(`@table:${refName}`)) {
+						targetRowIndex = i;
+						break;
+					}
+				}
+			}
 
 			await this.app.vault.modify(file, content);
 
-			if (savedScroll > 0) {
-				requestAnimationFrame(() => {
-					if (scrollEl) scrollEl.scrollTop = savedScroll;
-				});
+			if (targetRowIndex >= 0) {
+				const scrollToRow = () => {
+					const newTable = document.querySelector("table.nt-main-table");
+					if (!newTable) return;
+					const newRows = newTable.querySelectorAll("tbody tr");
+					const target = newRows[targetRowIndex];
+					if (target) target.scrollIntoView({ block: "center", behavior: "auto" });
+				};
+				requestAnimationFrame(() => requestAnimationFrame(scrollToRow));
 			}
 
 			new Notice("保存成功");
