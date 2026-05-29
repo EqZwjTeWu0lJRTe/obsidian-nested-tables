@@ -149,43 +149,52 @@ async function loadNestedTable(
 	}
 }
 
-function renderNestedTable(
+async function preloadEnriched(
 	data: NestedTableData,
 	depth: number,
 	sourcePath: string,
 	settings: NestedTableSettings,
-	plugin: NestedTablesPlugin,
+	app: App,
+	vault: Vault,
 	nestedCount: { count: number }
-): HTMLElement {
+): Promise<HTMLElement> {
 	const container = document.createElement("div");
 	container.className = `nested-table-container depth-${Math.min(depth, 4)}`;
 
 	if (depth > settings.warnDepth) {
-		const warning = container.createDiv({
-			cls: "subtable-depth-warning",
-		});
-		warning.textContent = `⚠ 嵌套深度 ${depth}，超过警告阈值 ${settings.warnDepth}`;
+		const warning = container.createDiv({ cls: "subtable-depth-warning" });
+		warning.textContent = `嵌套深度 ${depth}，超过警告阈值 ${settings.warnDepth}`;
 	}
 
 	if (depth >= settings.maxDepth) {
-		const limitMsg = container.createDiv({
-			cls: "subtable-depth-warning",
-		});
+		const limitMsg = container.createDiv({ cls: "subtable-depth-warning" });
 		limitMsg.textContent = `已到达最大嵌套深度 (${settings.maxDepth})，停止继续嵌套`;
 		return container;
 	}
 
 	if (nestedCount.count >= MAX_NESTED_TABLE_COUNT) {
-		const limitDiv = container.createDiv({
-			cls: "nested-table-limit-warning",
-		});
+		const limitDiv = container.createDiv({ cls: "nested-table-limit-warning" });
 		limitDiv.textContent = `嵌套表格数量超过限制 (${MAX_NESTED_TABLE_COUNT})，剩余表格已折叠`;
-		const expandAll = limitDiv.createEl("button", { text: "展开全部" });
-		expandAll.addEventListener("click", () => {
-			limitDiv.remove();
-		});
 		return container;
 	}
+
+	const subPreloads: Promise<{ col: number; row: number; el: HTMLElement }>[] = [];
+	for (const ref of data.subTables) {
+		if (nestedCount.count >= MAX_NESTED_TABLE_COUNT) break;
+		nestedCount.count++;
+		const p = loadNestedTable(
+			ref.sourcePath,
+			vault,
+			sourcePath,
+			new Set<string>(),
+			app
+		).then((subData) =>
+			preloadEnriched(subData, depth + 1, sourcePath, settings, app, vault, nestedCount)
+		).then((el) => ({ col: ref.col, row: ref.row, el }));
+		subPreloads.push(p);
+	}
+
+	const results = await Promise.all(subPreloads);
 
 	const table = container.createEl("table");
 	const thead = table.createEl("thead");
@@ -195,75 +204,24 @@ function renderNestedTable(
 	}
 
 	const tbody = table.createEl("tbody");
-	const needsCollapse = data.rows.length > settings.autoFoldThreshold;
-
-	let visibleRows = data.rows;
-
-	if (needsCollapse) {
-		tbody.classList.add("table-collapsed");
-
-		const expandBtn = container.createEl("button", {
-			cls: "expand-button",
-			text: `展开全部 (共 ${data.rows.length} 行)`,
-		});
-		expandBtn.addEventListener("click", () => {
-			tbody.classList.remove("table-collapsed");
-			expandBtn.remove();
-		});
-	}
-
-	for (let i = 0; i < visibleRows.length; i++) {
-		const row = visibleRows[i] as string[];
+	for (let i = 0; i < data.rows.length; i++) {
+		const row = data.rows[i] as string[];
 		const tr = tbody.createEl("tr");
-
 		for (let j = 0; j < data.headers.length; j++) {
 			const cellValue = row[j] || "";
-			const subTableRef = data.subTables.find(
-				(ref) => ref.row === i && ref.col === j
-			);
-
 			const td = tr.createEl("td");
-
-			if (subTableRef) {
-				td.addClass("has-subtable");
-				td.dataset.nestedSource = subTableRef.sourcePath;
+			const match = results.find((r) => r.row === i && r.col === j);
+			if (match) {
+				td.classList.add("has-subtable");
+				td.dataset.nestedSource = data.subTables.find(
+					(r) => r.row === i && r.col === j
+				)?.sourcePath || "";
 				td.dataset.nestedRow = String(i);
 				td.dataset.nestedCol = String(j);
-
-				const placeholder = td.createSpan({
-					cls: "subtable-placeholder",
-				});
-				placeholder.textContent = `▶ 子表格: ${subTableRef.sourcePath}`;
-
-				placeholder.addEventListener("click", async (e) => {
-					e.stopPropagation();
-					placeholder.textContent = "加载中...";
-					try {
-						const subData = await loadNestedTable(
-							subTableRef.sourcePath,
-							plugin.app.vault,
-							sourcePath,
-							new Set<string>(),
-							plugin.app
-						);
-						nestedCount.count++;
-						const subContainer = renderNestedTable(
-							subData,
-							depth + 1,
-							sourcePath,
-							settings,
-							plugin,
-							nestedCount
-						);
-						td.empty();
-						td.appendChild(subContainer);
-					} catch {
-						placeholder.textContent = "加载失败";
-					}
-				});
-
+				td.appendChild(match.el);
 				td.addEventListener("dblclick", () => {
-					handleCellDoubleClick(subTableRef.sourcePath, plugin);
+					const ref = data.subTables.find((r) => r.row === i && r.col === j);
+					if (ref) handleCellDoubleClick(ref.sourcePath, app);
 				});
 			} else {
 				td.textContent = cellValue;
@@ -274,26 +232,31 @@ function renderNestedTable(
 	return container;
 }
 
-function handleCellDoubleClick(sourcePath: string, plugin: NestedTablesPlugin) {
-	new NestedTableEditModal(plugin.app, sourcePath, plugin).open();
+function handleCellDoubleClick(sourcePath: string, app: App) {
+	new NestedTableEditModal(app, sourcePath).open();
 }
 
 class NestedTableEditModal extends Modal {
 	private sourcePath: string;
-	private plugin: NestedTablesPlugin;
 	private hasUnsavedChanges = false;
+	private activeFilePath: string;
 
-	constructor(app: App, sourcePath: string, plugin: NestedTablesPlugin) {
+	constructor(app: App, sourcePath: string) {
 		super(app);
 		this.sourcePath = sourcePath;
-		this.plugin = plugin;
 		this.titleEl.textContent = `编辑表格: ${sourcePath}`;
+		this.activeFilePath = this.getActiveFilePath();
+	}
+
+	private getActiveFilePath(): string {
+		const file = this.app.workspace.getActiveFile();
+		return file ? file.path : "";
 	}
 
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.addClass("nested-table-edit-modal");
+		contentEl.classList.add("nested-table-edit-modal");
 
 		const loadingEl = contentEl.createDiv({ text: "加载中..." });
 		this.loadTableData()
@@ -315,7 +278,7 @@ class NestedTableEditModal extends Modal {
 		try {
 			const resolved = this.app.metadataCache.getFirstLinkpathDest(
 				this.sourcePath,
-				this.plugin.getActiveFilePath()
+				this.getActiveFilePath()
 			);
 			if (!resolved) {
 				new Notice(`未找到文件: ${this.sourcePath}`);
@@ -366,19 +329,17 @@ class NestedTableEditModal extends Modal {
 		rows: string[][]
 	) {
 		const colCount = headers.length;
-		let currentHeaders = [...headers];
-		let currentRows = rows.map((r) => {
+		const currentHeaders = [...headers];
+		const currentRows = rows.map((r) => {
 			const padded = [...r];
 			while (padded.length < colCount) padded.push(" ");
 			return padded;
 		});
 
 		const gridContainer = container.createDiv({ cls: "edit-grid" });
-		const inputs: HTMLInputElement[][] = [];
 
 		const renderGrid = () => {
 			gridContainer.empty();
-			inputs.length = 0;
 
 			const totalCols = currentHeaders.length;
 			gridContainer.style.gridTemplateColumns = `repeat(${totalCols}, 1fr)`;
@@ -394,7 +355,6 @@ class NestedTableEditModal extends Modal {
 			}
 
 			for (let i = 0; i < currentRows.length; i++) {
-				const rowInputs: HTMLInputElement[] = [];
 				const row = currentRows[i] || [];
 				for (let j = 0; j < totalCols; j++) {
 					const input = gridContainer.createEl("input");
@@ -403,9 +363,7 @@ class NestedTableEditModal extends Modal {
 					input.addEventListener("input", () => {
 						this.hasUnsavedChanges = true;
 					});
-					rowInputs.push(input);
 				}
-				inputs.push(rowInputs);
 			}
 		};
 
@@ -415,8 +373,7 @@ class NestedTableEditModal extends Modal {
 
 		const addRowBtn = toolbar.createEl("button", { text: "+ 行" });
 		addRowBtn.addEventListener("click", () => {
-			const newRow = new Array(currentHeaders.length).fill(" ");
-			currentRows.push(newRow);
+			currentRows.push(new Array(currentHeaders.length).fill(" "));
 			renderGrid();
 			this.hasUnsavedChanges = true;
 		});
@@ -469,10 +426,10 @@ class NestedTableEditModal extends Modal {
 
 		const saveBtn = actions.createEl("button", { text: "保存并关闭" });
 		saveBtn.addEventListener("click", async () => {
-			const resolvedHeaders: string[] = [];
 			const allInputs = gridContainer.querySelectorAll("input");
 			const headerCount = currentHeaders.length;
 
+			const resolvedHeaders: string[] = [];
 			allInputs.forEach((input, idx) => {
 				if (idx < headerCount) {
 					resolvedHeaders.push(input.value || " ");
@@ -480,7 +437,6 @@ class NestedTableEditModal extends Modal {
 			});
 
 			const resolvedRows: string[][] = [];
-			let rowIdx = 0;
 			for (let idx = headerCount; idx < allInputs.length; idx += headerCount) {
 				const row: string[] = [];
 				for (let j = 0; j < headerCount; j++) {
@@ -488,7 +444,6 @@ class NestedTableEditModal extends Modal {
 					row.push(cellInput ? cellInput.value || " " : " ");
 				}
 				resolvedRows.push(row);
-				rowIdx++;
 			}
 
 			await this.saveToFile(resolvedHeaders, resolvedRows);
@@ -499,7 +454,7 @@ class NestedTableEditModal extends Modal {
 		try {
 			const resolved = this.app.metadataCache.getFirstLinkpathDest(
 				this.sourcePath,
-				this.plugin.getActiveFilePath()
+				this.getActiveFilePath()
 			);
 			if (!resolved) {
 				new Notice(`未找到文件: ${this.sourcePath}`);
@@ -554,82 +509,16 @@ class NestedTableEditModal extends Modal {
 
 export default class NestedTablesPlugin extends Plugin {
 	settings!: NestedTableSettings;
+	private mutationObserver: MutationObserver | null = null;
+	private processedTables = new WeakSet<HTMLTableElement>();
+	private refreshTimeout: number | null = null;
+	private isProcessing = false;
+	private dataCache = new Map<string, NestedTableData>();
 
 	async onload() {
 		await this.loadSettings();
 
 		this.addSettingTab(new NestedTableSettingTab(this.app, this));
-
-		this.registerMarkdownPostProcessor(
-			(el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
-				const tables = el.querySelectorAll("table");
-				if (tables.length === 0) return;
-
-				const sourcePath = ctx.sourcePath;
-				const nestedCount = { count: 0 };
-
-				tables.forEach((table) => {
-					const rows = table.querySelectorAll("tr");
-					rows.forEach((row, rowIdx) => {
-						const cells = row.querySelectorAll("td, th");
-						cells.forEach((cell, colIdx) => {
-							const text = cell.textContent || "";
-							const match = text.match(SUBTABLE_REGEX);
-							if (match) {
-								const refName = (match[1] as string).trim();
-								cell.empty();
-								cell.addClass("has-subtable");
-
-								const placeholder =
-									cell.createSpan({
-										cls: "subtable-placeholder",
-									});
-								placeholder.textContent = `▶ 子表格: ${refName}`;
-
-								placeholder.addEventListener("click", async (e) => {
-									e.stopPropagation();
-									placeholder.textContent = "加载中...";
-									try {
-										const subData = await loadNestedTable(
-											refName,
-											this.app.vault,
-											sourcePath,
-											new Set<string>(),
-											this.app
-										);
-										nestedCount.count++;
-										const subContainer = renderNestedTable(
-											subData,
-											1,
-											sourcePath,
-											this.settings,
-											this,
-											nestedCount
-										);
-										cell.empty();
-										cell.appendChild(subContainer);
-									} catch {
-										placeholder.textContent = "加载失败";
-									}
-								});
-							}
-						});
-					});
-				});
-			}
-		);
-
-		let refreshTimeout: number | null = null;
-		this.registerEvent(
-			this.app.vault.on("modify", () => {
-				if (refreshTimeout !== null) {
-					clearTimeout(refreshTimeout);
-				}
-				refreshTimeout = window.setTimeout(() => {
-					refreshTimeout = null;
-				}, 500);
-			})
-		);
 
 		this.addCommand({
 			id: "insert-table-ref",
@@ -647,12 +536,216 @@ export default class NestedTablesPlugin extends Plugin {
 			id: "refresh-nested-tables",
 			name: "刷新所有嵌套表格",
 			callback: () => {
-				new Notice("嵌套表格将在下次渲染时刷新");
+				this.scheduleRefresh();
+				new Notice("嵌套表格已刷新");
 			},
 		});
+
+		this.registerMarkdownPostProcessor(
+			(el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
+				const tables = Array.from(el.querySelectorAll("table"));
+				if (tables.length === 0) return;
+
+				for (const table of tables) {
+					if (this.processedTables.has(table)) continue;
+					this.processedTables.add(table);
+					this.processTable(table, ctx.sourcePath, { count: 0 });
+				}
+			},
+			-100
+		);
+
+		this.registerEvent(
+			this.app.workspace.on("layout-change", () => {
+				this.scheduleRefresh();
+			})
+		);
+
+		this.registerEvent(
+			this.app.workspace.on("active-leaf-change", () => {
+				this.dataCache.clear();
+				this.preloadCurrentFile().then(() => this.processAllTables());
+			})
+		);
+
+		this.registerEvent(
+			this.app.vault.on("modify", () => {
+				this.dataCache.clear();
+				this.scheduleRefresh();
+			})
+		);
+
+		this.startMutationObserver();
+		this.scheduleRefresh();
 	}
 
-	onunload() {
+	private async preloadCurrentFile() {
+		const file = this.app.workspace.getActiveFile();
+		if (!file) return;
+		try {
+			const content = await this.app.vault.read(file);
+			const tableRegex = /\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/g;
+			let m: RegExpExecArray | null;
+			const refNames = new Set<string>();
+			while ((m = tableRegex.exec(content)) !== null) {
+				const dataLines = (m[2] as string).trim().split("\n");
+				for (const line of dataLines) {
+					const cells = line.split("|").map(c => c.trim());
+					for (const cell of cells) {
+						const refMatch = cell.match(SUBTABLE_REGEX);
+						if (refMatch) refNames.add(refMatch[1].trim());
+					}
+				}
+			}
+			const visited = new Set<string>([file.path]);
+			for (const name of refNames) {
+				if (this.dataCache.has(name)) continue;
+				try {
+					const data = await loadNestedTable(name, this.app.vault, file.path, visited, this.app);
+					this.dataCache.set(name, data);
+					await this.cacheNested(data, file.path, new Set(visited));
+				} catch {
+					// skip
+				}
+			}
+		} catch {
+			// skip
+		}
+	}
+
+	private async cacheNested(data: NestedTableData, sourcePath: string, visited: Set<string>) {
+		for (const ref of data.subTables) {
+			if (this.dataCache.has(ref.sourcePath)) continue;
+			try {
+				const nested = await loadNestedTable(ref.sourcePath, this.app.vault, sourcePath, visited, this.app);
+				this.dataCache.set(ref.sourcePath, nested);
+				await this.cacheNested(nested, sourcePath, visited);
+			} catch {
+				// skip
+			}
+		}
+	}
+
+	private startMutationObserver() {
+		this.mutationObserver = new MutationObserver(() => {
+			if (this.isProcessing) return;
+			this.processAllTables();
+		});
+
+		const observeTarget = () => {
+			const target = document.querySelector(
+				'.workspace-leaf-content[data-type="markdown"]'
+			);
+			if (target) {
+				this.mutationObserver?.observe(target, {
+					childList: true,
+					subtree: true,
+				});
+				return true;
+			}
+			return false;
+		};
+
+		if (!observeTarget()) {
+			const checkInterval = window.setInterval(() => {
+				if (observeTarget()) {
+					clearInterval(checkInterval);
+				}
+			}, 500);
+			this.registerInterval(checkInterval);
+		}
+	}
+
+	private scheduleRefresh() {
+		if (this.refreshTimeout !== null) {
+			clearTimeout(this.refreshTimeout);
+		}
+		this.refreshTimeout = window.setTimeout(() => {
+			this.refreshTimeout = null;
+			this.processAllTables();
+		}, 500);
+	}
+
+	private async processAllTables() {
+		if (this.isProcessing) return;
+		this.isProcessing = true;
+
+		try {
+			const activeFile = this.app.workspace.getActiveFile();
+			if (!activeFile) return;
+
+			const sourcePath = activeFile.path;
+			const leafContent = document.querySelector(
+				'.workspace-leaf-content[data-type="markdown"]'
+			);
+			if (!leafContent) return;
+
+			const tables = Array.from(leafContent.querySelectorAll("table"));
+			const nestedCount = { count: 0 };
+
+			for (const table of tables) {
+				if (this.processedTables.has(table)) continue;
+				this.processedTables.add(table);
+
+				await this.processTable(table, sourcePath, nestedCount);
+			}
+		} finally {
+			this.isProcessing = false;
+		}
+	}
+
+	private async processTable(
+		table: HTMLTableElement,
+		sourcePath: string,
+		nestedCount: { count: number }
+	) {
+		const refs: { cell: Element; wrapper: Element | null; refName: string }[] = [];
+
+		const rows = Array.from(table.querySelectorAll("tr"));
+		for (const row of rows) {
+			const cells = Array.from(row.querySelectorAll("td, th"));
+			for (const cell of cells) {
+				const cellWrapper = (cell as HTMLElement).querySelector(".table-cell-wrapper");
+				const textEl = cellWrapper || cell;
+				const text = textEl.textContent || "";
+				const match = text.match(SUBTABLE_REGEX);
+				if (match) {
+					const refName = (match[1] as string).trim();
+					refs.push({ cell, wrapper: cellWrapper, refName });
+				}
+			}
+		}
+
+		if (refs.length === 0) return;
+
+		for (const ref of refs) {
+			const targetEl = ref.wrapper || ref.cell;
+			targetEl.classList.add("has-subtable", "nt-unprocessed");
+		}
+
+		const loaded = await Promise.all(
+			refs.map((ref) => {
+				const cached = this.dataCache.get(ref.refName);
+				const dataPromise = cached
+					? Promise.resolve(cached)
+					: loadNestedTable(ref.refName, this.app.vault, sourcePath, new Set<string>(), this.app);
+				return dataPromise.then(async (subData) => {
+					nestedCount.count++;
+					const enriched = await preloadEnriched(
+						subData, 1, sourcePath, this.settings, this.app, this.app.vault, nestedCount
+					);
+					return { ref, el: enriched };
+				});
+			})
+		);
+
+		for (const { ref, el } of loaded) {
+			const targetEl = ref.wrapper || ref.cell;
+			targetEl.classList.remove("nt-unprocessed");
+			targetEl.empty();
+			targetEl.classList.add("has-subtable");
+			targetEl.appendChild(el);
+		}
 	}
 
 	getActiveFilePath(): string {
@@ -664,16 +757,19 @@ export default class NestedTablesPlugin extends Plugin {
 	}
 
 	async loadSettings() {
+		const saved = await this.loadData() as Partial<NestedTableSettings> | null;
 		this.settings = Object.assign(
 			{},
 			DEFAULT_SETTINGS,
-			await this.loadData()
+			saved || {}
 		) as NestedTableSettings;
+		if (saved && saved.maxDepth !== undefined && saved.maxDepth < 6) {
+			this.settings.maxDepth = 10;
+			await this.saveSettings();
+		}
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
-
-
 }

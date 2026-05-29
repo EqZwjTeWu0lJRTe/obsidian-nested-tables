@@ -3,15 +3,13 @@ import NestedTablesPlugin from "./main";
 
 export interface NestedTableSettings {
 	maxDepth: number;
-	autoFoldThreshold: number;
 	warnDepth: number;
 	enableEditorWidget: boolean;
 }
 
 export const DEFAULT_SETTINGS: NestedTableSettings = {
-	maxDepth: 3,
-	autoFoldThreshold: 10,
-	warnDepth: 2,
+	maxDepth: 10,
+	warnDepth: 3,
 	enableEditorWidget: true,
 };
 
@@ -40,22 +38,6 @@ export class NestedTableSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.maxDepth = value;
 						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName("自动折叠行数阈值")
-			.setDesc("子表格超过此行数时默认折叠")
-			.addText((text) =>
-				text
-					.setPlaceholder("10")
-					.setValue(String(this.plugin.settings.autoFoldThreshold))
-					.onChange(async (value) => {
-						const num = parseInt(value, 10);
-						if (!isNaN(num) && num > 0) {
-							this.plugin.settings.autoFoldThreshold = num;
-							await this.plugin.saveSettings();
-						}
 					})
 			);
 
