@@ -67,6 +67,21 @@ td.has-subtable:hover, th.has-subtable:hover,
 	min-width: 120px;
 }
 
+.nested-table-container:has(img, audio, video),
+.nested-table-container:has(img, audio, video) .nested-table-container {
+	max-width: 100%;
+	min-width: 300px;
+}
+
+.nested-table-container:has(img, audio, video) table {
+	min-width: auto;
+}
+
+.nested-table-container img {
+	max-width: 100%;
+	height: auto;
+}
+
 .nt-main-table {
 	table-layout: auto;
 	width: auto;
