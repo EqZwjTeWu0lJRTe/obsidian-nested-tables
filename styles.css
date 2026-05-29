@@ -3,6 +3,9 @@
 	overflow-x: auto;
 	overflow-y: hidden;
 	padding: 4px 0;
+	display: block;
+	max-width: 340px;
+	min-width: 180px;
 }
 
 .nested-table-container table {
@@ -36,12 +39,10 @@
 
 td.has-subtable, th.has-subtable,
 .table-cell-wrapper.has-subtable {
-	max-width: 360px;
-	overflow: auto !important;
 	background-color: var(--background-primary-alt);
 	cursor: default;
-	min-width: 0;
 	padding: 6px 8px !important;
+	min-width: 0;
 }
 
 td.has-subtable:hover, th.has-subtable:hover,
@@ -49,28 +50,13 @@ td.has-subtable:hover, th.has-subtable:hover,
 	background-color: var(--background-modifier-hover);
 }
 
-.depth-2 td.has-subtable,
-.depth-2 th.has-subtable,
-.depth-2 .table-cell-wrapper.has-subtable {
-	max-width: 300px;
-}
-
-.depth-3 td.has-subtable,
-.depth-3 th.has-subtable,
-.depth-3 .table-cell-wrapper.has-subtable {
-	max-width: 260px;
-}
-
-.nested-table-container {
-	max-width: 100%;
-	min-width: 180px;
-}
-
 .depth-2 .nested-table-container {
+	max-width: 280px;
 	min-width: 140px;
 }
 
 .depth-3 .nested-table-container {
+	max-width: 240px;
 	min-width: 120px;
 }
 
