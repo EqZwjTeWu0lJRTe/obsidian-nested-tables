@@ -10,7 +10,7 @@ import {
 	Vault,
 } from "obsidian";
 import { EditorView } from "@codemirror/view";
-import { EditorSelection } from "@codemirror/state";
+
 import {
 	DEFAULT_SETTINGS,
 	NestedTableSettings,
@@ -568,21 +568,22 @@ class NestedTableEditModal extends Modal {
 			}
 
 			const refName = this.sourcePath.replace(/\.md$/, "").replace(/^.*\//, "");
-			const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-			const cmView = (markdownView?.editor as any)?.cm as EditorView | null;
+
+			const scrollEl = document.querySelector(".cm-scroller");
+			const savedTop = scrollEl ? scrollEl.scrollTop : 0;
 
 			await this.app.vault.modify(file, content);
 
-			if (cmView) {
-				await new Promise(r => setTimeout(r, 0));
-				const fullText = cmView.state.doc.toString();
-				const newIdx = fullText.indexOf(`@table:${refName}`);
-				if (newIdx >= 0) {
-					cmView.dispatch({
-						selection: EditorSelection.cursor(newIdx),
-						scrollIntoView: true,
-					});
-				}
+			if (savedTop > 0) {
+				const el = document.querySelector(".cm-scroller, .markdown-preview-view") as HTMLElement | null;
+				if (!el) return;
+				const guard = () => {
+					if (el.scrollTop < savedTop - 10) el.scrollTop = savedTop;
+				};
+				el.addEventListener("scroll", guard, { once: true });
+				setTimeout(() => el.removeEventListener("scroll", guard), 400);
+				setTimeout(guard, 100);
+				setTimeout(guard, 250);
 			}
 
 			new Notice("保存成功");
