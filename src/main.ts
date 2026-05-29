@@ -1,12 +1,15 @@
 import {
 	App,
+	Editor,
 	MarkdownPostProcessorContext,
+	MarkdownView,
 	Modal,
 	Notice,
 	Plugin,
 	TFile,
 	Vault,
 } from "obsidian";
+import { EditorView } from "@codemirror/view";
 import {
 	DEFAULT_SETTINGS,
 	NestedTableSettings,
@@ -564,30 +567,28 @@ class NestedTableEditModal extends Modal {
 			}
 
 			const refName = this.sourcePath.replace(/\.md$/, "").replace(/^.*\//, "");
-			let targetRowIndex = -1;
-			const mainTable = document.querySelector("table.nt-main-table");
-			if (mainTable) {
-				const rows = mainTable.querySelectorAll("tbody tr");
-				for (let i = 0; i < rows.length; i++) {
-					const cell = rows[i]?.querySelector("td:nth-child(2)");
-					if (cell && cell.textContent?.includes(`@table:${refName}`)) {
-						targetRowIndex = i;
-						break;
-					}
+			let targetScrollPos: number | null = null;
+			const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+			const cmView = (markdownView?.editor as any)?.cm as EditorView | null;
+
+			if (cmView) {
+				const doc = cmView.state.doc;
+				const searchStr = `@table:${refName}`;
+				const fullText = doc.toString();
+				const idx = fullText.indexOf(searchStr);
+				if (idx >= 0) {
+					targetScrollPos = idx;
 				}
 			}
 
 			await this.app.vault.modify(file, content);
 
-			if (targetRowIndex >= 0) {
-				const scrollToRow = () => {
-					const newTable = document.querySelector("table.nt-main-table");
-					if (!newTable) return;
-					const newRows = newTable.querySelectorAll("tbody tr");
-					const target = newRows[targetRowIndex];
-					if (target) target.scrollIntoView({ block: "center", behavior: "auto" });
-				};
-				requestAnimationFrame(() => requestAnimationFrame(scrollToRow));
+			if (cmView && targetScrollPos !== null) {
+				requestAnimationFrame(() => {
+					cmView.dispatch({
+						effects: EditorView.scrollIntoView(targetScrollPos, { y: "center" }),
+					});
+				});
 			}
 
 			new Notice("保存成功");
