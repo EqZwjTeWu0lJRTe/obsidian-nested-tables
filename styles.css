@@ -1,11 +1,14 @@
 .nested-table-container {
-	margin: 0;
+	margin: 4px 0;
 	overflow-x: auto;
 	overflow-y: hidden;
-	padding: 4px 0;
+	padding: 6px;
 	display: block;
 	max-width: 340px;
 	min-width: 180px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	background-color: var(--background-primary);
 }
 
 .nested-table-container table {
@@ -13,13 +16,12 @@
 	min-width: 100%;
 	width: auto;
 	font-size: var(--font-text-size);
-	word-break: break-word;
 }
 
 .nested-table-container th {
 	background-color: var(--background-secondary-alt);
 	border: 1px solid var(--background-modifier-border);
-	padding: 4px 8px;
+	padding: 4px 10px;
 	font-weight: var(--font-bold);
 	text-align: left;
 	white-space: nowrap;
@@ -27,8 +29,9 @@
 
 .nested-table-container td {
 	border: 1px solid var(--background-modifier-border);
-	padding: 4px 8px;
+	padding: 4px 10px;
 	vertical-align: top;
+	white-space: nowrap;
 }
 
 .depth-0 table { font-size: 1em; }
@@ -41,8 +44,9 @@ td.has-subtable, th.has-subtable,
 .table-cell-wrapper.has-subtable {
 	background-color: var(--background-primary-alt);
 	cursor: default;
-	padding: 6px 8px !important;
+	padding: 8px 10px !important;
 	min-width: 0;
+	vertical-align: top;
 }
 
 td.has-subtable:hover, th.has-subtable:hover,
