@@ -897,6 +897,9 @@ export default class NestedTablesPlugin extends Plugin {
 		sourcePath: string,
 		nestedCount: { count: number }
 	) {
+		if (table.closest(".nested-table-container")) return;
+
+		table.classList.add("nt-main-table");
 		const refs: { cell: Element; wrapper: Element | null; refName: string }[] = [];
 
 		const rows = Array.from(table.querySelectorAll("tr"));
