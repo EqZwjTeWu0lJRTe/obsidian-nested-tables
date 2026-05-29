@@ -429,10 +429,27 @@ class NestedTableEditModal extends Modal {
 
 		renderGrid();
 
+		const syncGridToArrays = () => {
+			const inputs = Array.from(gridContainer.querySelectorAll("input"));
+			const totalCols = currentHeaders.length;
+			for (let i = 0; i < inputs.length; i++) {
+				const inp = inputs[i] as HTMLInputElement;
+				if (i < totalCols) {
+					currentHeaders[i] = inp.value || " ";
+				} else {
+					const rowIdx = Math.floor((i - totalCols) / totalCols);
+					const colIdx = (i - totalCols) % totalCols;
+					if (!currentRows[rowIdx]) currentRows[rowIdx] = [];
+					currentRows[rowIdx][colIdx] = inp.value || " ";
+				}
+			}
+		};
+
 		const toolbar = container.createDiv({ cls: "edit-toolbar" });
 
 		const addRowBtn = toolbar.createEl("button", { text: "+ 行" });
 		addRowBtn.addEventListener("click", () => {
+			syncGridToArrays();
 			currentRows.push(new Array(currentHeaders.length).fill(" "));
 			renderGrid();
 			this.hasUnsavedChanges = true;
@@ -440,6 +457,7 @@ class NestedTableEditModal extends Modal {
 
 		const addColBtn = toolbar.createEl("button", { text: "+ 列" });
 		addColBtn.addEventListener("click", () => {
+			syncGridToArrays();
 			currentHeaders.push("新列");
 			for (const row of currentRows) {
 				row.push(" ");
@@ -450,6 +468,7 @@ class NestedTableEditModal extends Modal {
 
 		const removeRowBtn = toolbar.createEl("button", { text: "- 行" });
 		removeRowBtn.addEventListener("click", () => {
+			syncGridToArrays();
 			if (currentRows.length <= 2) {
 				new Notice("至少保留2行");
 				return;
@@ -461,6 +480,7 @@ class NestedTableEditModal extends Modal {
 
 		const removeColBtn = toolbar.createEl("button", { text: "- 列" });
 		removeColBtn.addEventListener("click", () => {
+			syncGridToArrays();
 			if (currentHeaders.length <= 1) {
 				new Notice("至少保留1列");
 				return;
@@ -486,21 +506,7 @@ class NestedTableEditModal extends Modal {
 
 		const saveBtn = actions.createEl("button", { text: "保存并关闭" });
 		saveBtn.addEventListener("click", async () => {
-			const allInputs = Array.from(gridContainer.querySelectorAll("input"));
-			const totalCols = currentHeaders.length;
-
-			for (let i = 0; i < allInputs.length; i++) {
-				const inp = allInputs[i] as HTMLInputElement;
-				if (i < totalCols) {
-					currentHeaders[i] = inp.value || " ";
-				} else {
-					const rowIdx = Math.floor((i - totalCols) / totalCols);
-					const colIdx = (i - totalCols) % totalCols;
-					if (!currentRows[rowIdx]) currentRows[rowIdx] = [];
-					currentRows[rowIdx][colIdx] = inp.value || " ";
-				}
-			}
-
+			syncGridToArrays();
 			await this.saveToFile([...currentHeaders], currentRows.map(r => [...r]));
 		});
 	}
@@ -536,17 +542,15 @@ class NestedTableEditModal extends Modal {
 					"|"
 			);
 
-			const tableStr = [sepLine, ...dataLines].join("\n");
+			const headerLine = "|" + headers.join("|") + "|";
+			const tableStr = [headerLine, sepLine, ...dataLines].join("\n");
 
 			let content = await this.app.vault.read(file);
-			const tableMatch = content.match(
-				/\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/
-			);
+			const tableRegex = /\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/;
+			const tableMatch = content.match(tableRegex);
 			if (tableMatch) {
 				const fullMatch = tableMatch[0] as string;
-				const headerLine = "|" + headers.join("|") + "|";
-				const newTable = [headerLine, ...tableStr.split("\n").slice(1)].join("\n");
-				content = content.replace(fullMatch, newTable);
+				content = content.replace(fullMatch, tableStr);
 			} else {
 				new Notice("文件中没有找到 Markdown 表格");
 				return;
@@ -654,7 +658,7 @@ class FileSearchModal extends Modal {
 	}
 
 	private async createAndSelect(name: string) {
-		const template = `| 列1 | 列2 |
+		const template = `|列1|列2|
 |---|---|
 |  |  |`;
 		try {
