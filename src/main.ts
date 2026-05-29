@@ -556,28 +556,30 @@ class NestedTableEditModal extends Modal {
 			const headerLine = "|" + headers.join("|") + "|";
 			const newTableStr = [headerLine, sepLine, ...dataLines].join("\n");
 
-			const oldContent = await this.app.vault.read(file);
-			const tableRegex = /\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/;
-			const oldMatch = oldContent.match(tableRegex);
-
-			if (!oldMatch || oldMatch.index === undefined) {
-				new Notice("文件中没有找到 Markdown 表格");
-				return;
-			}
-
 			const view = (this.app.workspace.activeEditor?.editor as any)?.cm as EditorView | undefined;
 			if (view) {
-				const doc = view.state.doc.toString();
-				const oldStart = oldMatch.index;
-				const oldEnd = oldMatch.index + oldMatch[0].length;
-
+				const tableRegex = /\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/;
+				const docStr = view.state.doc.toString();
+				const docMatch = docStr.match(tableRegex);
+				if (!docMatch || docMatch.index === undefined) {
+					new Notice("文件中没有找到 Markdown 表格");
+					return;
+				}
 				view.dispatch({
-					changes: { from: oldStart, to: oldEnd, insert: newTableStr },
+					changes: {
+						from: docMatch.index,
+						to: docMatch.index + docMatch[0].length,
+						insert: newTableStr,
+					},
 				});
-
-				await this.app.vault.modify(file, view.state.doc.toString());
 			} else {
-				const newContent = oldContent.replace(oldMatch[0], newTableStr);
+				const oldContent = await this.app.vault.read(file);
+				const tableRegex = /\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/;
+				const newContent = oldContent.replace(tableRegex, newTableStr);
+				if (newContent === oldContent) {
+					new Notice("文件中没有找到 Markdown 表格");
+					return;
+				}
 				await this.app.vault.modify(file, newContent);
 			}
 
