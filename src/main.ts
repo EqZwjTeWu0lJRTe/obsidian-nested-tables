@@ -739,8 +739,10 @@ export default class NestedTablesPlugin extends Plugin {
 		this.registerEvent(
 			this.app.workspace.on("active-leaf-change", () => {
 				this.dataCache.clear();
-				this.preloadCurrentFile().then(() => this.processAllTables());
+				this.processedTables = new WeakSet();
 				this.restartMutationObserver();
+				this.preloadCurrentFile();
+				setTimeout(() => this.processAllTables(), 300);
 			})
 		);
 
@@ -841,10 +843,10 @@ export default class NestedTablesPlugin extends Plugin {
 			if (this.isProcessing) return;
 			this.processAllTables();
 		});
-		const target = document.querySelector(
+		const targets = Array.from(document.querySelectorAll(
 			'.workspace-leaf-content[data-type="markdown"]'
-		);
-		if (target) {
+		));
+		for (const target of targets) {
 			this.mutationObserver.observe(target, {
 				childList: true,
 				subtree: true,
