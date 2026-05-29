@@ -1,0 +1,16 @@
+{
+	"name": "obsidian-nested-tables",
+	"version": "1.0.0",
+	"description": "Obsidian nested tables plugin",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production"
+	},
+	"devDependencies": {
+		"@types/node": "^20.0.0",
+		"obsidian": "latest",
+		"typescript": "^5.0.0",
+		"esbuild": "^0.19.0"
+	}
+}
