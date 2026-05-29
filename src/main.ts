@@ -556,7 +556,17 @@ class NestedTableEditModal extends Modal {
 				return;
 			}
 
+			const scrollEl = document.querySelector(".cm-scroller, .markdown-preview-view");
+			const savedScroll = scrollEl ? scrollEl.scrollTop : 0;
+
 			await this.app.vault.modify(file, content);
+
+			if (savedScroll > 0) {
+				requestAnimationFrame(() => {
+					if (scrollEl) scrollEl.scrollTop = savedScroll;
+				});
+			}
+
 			new Notice("保存成功");
 			this.hasUnsavedChanges = false;
 			this.close();
