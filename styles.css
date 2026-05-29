@@ -1,0 +1,179 @@
+.nested-table-container {
+	margin: 8px 0;
+	overflow-x: auto;
+}
+
+.nested-table-container table {
+	border-collapse: collapse;
+	width: 100%;
+	font-size: var(--font-text-size);
+}
+
+.nested-table-container th {
+	background-color: var(--background-secondary-alt);
+	border: 1px solid var(--background-modifier-border);
+	padding: 6px 10px;
+	font-weight: var(--font-bold);
+	text-align: left;
+}
+
+.nested-table-container td {
+	border: 1px solid var(--background-modifier-border);
+	padding: 6px 10px;
+	vertical-align: top;
+}
+
+.depth-0 table { font-size: 1em; }
+.depth-1 table { font-size: 0.95em; }
+.depth-2 table { font-size: 0.9em; }
+.depth-3 table { font-size: 0.85em; }
+.depth-4 table { font-size: 0.8em; }
+
+.has-subtable {
+	background-color: var(--background-primary-alt);
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+}
+
+.has-subtable:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.subtable-placeholder {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 8px;
+	border: 1px dashed var(--interactive-accent);
+	border-radius: 4px;
+	color: var(--interactive-accent);
+	font-size: 0.9em;
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+
+.subtable-placeholder:hover {
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.subtable-error {
+	display: inline-block;
+	padding: 4px 8px;
+	background-color: var(--background-secondary);
+	border: 1px solid var(--color-red);
+	border-radius: 4px;
+	color: var(--color-red);
+	font-size: 0.9em;
+}
+
+.subtable-depth-warning {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 12px;
+	margin-bottom: 8px;
+	background-color: var(--background-secondary);
+	border: 1px solid var(--color-orange);
+	border-radius: 4px;
+	color: var(--color-orange);
+	font-size: 0.85em;
+}
+
+.nested-table-edit-modal {
+	padding: 0;
+}
+
+.nested-table-edit-modal .edit-grid {
+	display: grid;
+	gap: 4px;
+	margin: 16px 0;
+}
+
+.nested-table-edit-modal input {
+	width: 100%;
+	padding: 6px 8px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	background-color: var(--background-primary);
+	color: var(--text-normal);
+	font-size: var(--font-text-size);
+	box-sizing: border-box;
+}
+
+.nested-table-edit-modal input:focus {
+	border-color: var(--interactive-accent);
+	outline: none;
+}
+
+.nested-table-edit-modal .edit-toolbar {
+	display: flex;
+	gap: 8px;
+	margin: 12px 0;
+	flex-wrap: wrap;
+}
+
+.nested-table-edit-modal .edit-actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 16px;
+	justify-content: flex-end;
+}
+
+.nested-table-container.loading {
+	opacity: 0.6;
+	pointer-events: none;
+}
+
+.nested-table-container .table-collapsed {
+	max-height: 400px;
+	overflow-y: hidden;
+	position: relative;
+}
+
+.nested-table-container .table-collapsed::after {
+	content: '';
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	height: 40px;
+	background: linear-gradient(transparent, var(--background-primary));
+}
+
+.nested-table-container .expand-button {
+	display: block;
+	margin: 4px auto;
+	padding: 4px 16px;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 0.85em;
+}
+
+.nested-table-container .expand-button:hover {
+	opacity: 0.8;
+}
+
+.nested-table-container .nested-table-limit-warning {
+	padding: 8px 12px;
+	margin: 8px 0;
+	background-color: var(--background-secondary);
+	border: 1px solid var(--color-yellow);
+	border-radius: 4px;
+	color: var(--text-muted);
+	font-size: 0.85em;
+	text-align: center;
+}
+
+.nested-table-container .nested-table-limit-warning button {
+	margin-left: 8px;
+	padding: 2px 12px;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+}
