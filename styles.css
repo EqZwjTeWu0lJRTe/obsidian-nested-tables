@@ -17,6 +17,7 @@
 	border-collapse: collapse;
 	width: 100%;
 	font-size: var(--font-text-size);
+	table-layout: auto !important;
 }
 
 .nested-table-container th {
