@@ -1,6 +1,8 @@
 import {
 	App,
+	Component,
 	MarkdownPostProcessorContext,
+	MarkdownRenderer,
 	Modal,
 	Notice,
 	Plugin,
@@ -241,6 +243,9 @@ async function preloadEnriched(
 	}
 
 	const tbody = table.createEl("tbody");
+	const renderTasks: Promise<void>[] = [];
+	const renderComp = new Component();
+	renderComp.load();
 	for (let i = 0; i < data.rows.length; i++) {
 		const row = data.rows[i] as string[];
 		const tr = tbody.createEl("tr");
@@ -261,10 +266,14 @@ async function preloadEnriched(
 					if (ref) handleCellDoubleClick(ref.sourcePath, app);
 				});
 			} else {
-				td.textContent = cellValue;
+				renderTasks.push(
+					MarkdownRenderer.render(app, cellValue, td, sourcePath, renderComp)
+				);
 			}
 		}
 	}
+
+	await Promise.all(renderTasks);
 
 	return container;
 }
