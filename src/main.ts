@@ -699,6 +699,10 @@ export default class NestedTablesPlugin extends Plugin {
 			editorCallback: (editor) => {
 				new FileSearchModal(this.app, (name) => {
 					editor.replaceSelection(`@table:${name}`);
+					this.processedTables = new WeakSet();
+					this.dataCache.clear();
+					this.preloadCurrentFile();
+					setTimeout(() => this.scheduleRefresh(), 100);
 				}).open();
 			},
 		});
@@ -736,6 +740,7 @@ export default class NestedTablesPlugin extends Plugin {
 			this.app.workspace.on("active-leaf-change", () => {
 				this.dataCache.clear();
 				this.preloadCurrentFile().then(() => this.processAllTables());
+				this.restartMutationObserver();
 			})
 		);
 
@@ -798,17 +803,18 @@ export default class NestedTablesPlugin extends Plugin {
 	}
 
 	private startMutationObserver() {
-		this.mutationObserver = new MutationObserver(() => {
-			if (this.isProcessing) return;
-			this.processAllTables();
-		});
+		const doObserve = () => {
+			if (this.mutationObserver) this.mutationObserver.disconnect();
+			this.mutationObserver = new MutationObserver(() => {
+				if (this.isProcessing) return;
+				this.processAllTables();
+			});
 
-		const observeTarget = () => {
 			const target = document.querySelector(
 				'.workspace-leaf-content[data-type="markdown"]'
 			);
 			if (target) {
-				this.mutationObserver?.observe(target, {
+				this.mutationObserver.observe(target, {
 					childList: true,
 					subtree: true,
 				});
@@ -817,13 +823,32 @@ export default class NestedTablesPlugin extends Plugin {
 			return false;
 		};
 
-		if (!observeTarget()) {
+		if (!doObserve()) {
 			const checkInterval = window.setInterval(() => {
-				if (observeTarget()) {
+				if (doObserve()) {
 					clearInterval(checkInterval);
 				}
 			}, 500);
 			this.registerInterval(checkInterval);
+		}
+	}
+
+	private restartMutationObserver() {
+		if (this.mutationObserver) {
+			this.mutationObserver.disconnect();
+		}
+		this.mutationObserver = new MutationObserver(() => {
+			if (this.isProcessing) return;
+			this.processAllTables();
+		});
+		const target = document.querySelector(
+			'.workspace-leaf-content[data-type="markdown"]'
+		);
+		if (target) {
+			this.mutationObserver.observe(target, {
+				childList: true,
+				subtree: true,
+			});
 		}
 	}
 

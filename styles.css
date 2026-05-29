@@ -169,6 +169,12 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	flex: 1;
+	opacity: 0;
+	transition: opacity 0.15s;
+}
+
+.nested-table-container:hover .nt-header-title {
+	opacity: 1;
 }
 
 .nt-header-buttons {
