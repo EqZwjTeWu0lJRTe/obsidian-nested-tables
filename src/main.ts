@@ -974,7 +974,7 @@ export default class NestedTablesPlugin extends Plugin {
 						const cell = el as HTMLElement;
 						const ref = cell.getAttribute('data-nt-original-ref') || '';
 						cell.removeAttribute('data-nt-original-ref');
-						cell.classList.remove('has-subtable', 'nt-unprocessed');
+						cell.classList.remove('has-subtable');
 						cell.textContent = ref;
 					});
 				}
@@ -1158,7 +1158,7 @@ export default class NestedTablesPlugin extends Plugin {
 
 		for (const ref of refs) {
 			const targetEl = ref.wrapper || ref.cell;
-			targetEl.classList.add("has-subtable", "nt-unprocessed");
+			targetEl.classList.add("has-subtable");
 			(targetEl as HTMLElement).dataset.ntOriginalRef = ref.matchText;
 			targetEl.addEventListener("dblclick", (e) => {
 				e.stopPropagation();
