@@ -1,7 +1,7 @@
 {
 	"id": "obsidian-nested-tables",
 	"name": "Nested Tables",
-	"version": "1.0.0",
+	"version": "1.2.0",
 	"minAppVersion": "1.5.0",
 	"description": "实现嵌套表格功能，使用 @table:文件名 语法引用子表格",
 	"author": "EqZwjTeWu0lJRTe",
