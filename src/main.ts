@@ -1160,6 +1160,8 @@ export default class NestedTablesPlugin extends Plugin {
 			const targetEl = ref.wrapper || ref.cell;
 			targetEl.classList.add("has-subtable");
 			(targetEl as HTMLElement).dataset.ntOriginalRef = ref.matchText;
+			// Clear cell immediately to avoid flash of @table: text
+			targetEl.empty();
 			targetEl.addEventListener("dblclick", (e) => {
 				e.stopPropagation();
 				if (!targetEl.querySelector(".nested-table-container")) {
@@ -1187,7 +1189,6 @@ export default class NestedTablesPlugin extends Plugin {
 
 		for (const { ref, el } of loaded) {
 			const targetEl = ref.wrapper || ref.cell;
-			targetEl.classList.remove("nt-unprocessed");
 			targetEl.empty();
 			targetEl.classList.add("has-subtable");
 			targetEl.appendChild(el);
