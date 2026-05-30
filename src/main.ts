@@ -966,10 +966,19 @@ export default class NestedTablesPlugin extends Plugin {
 		this.registerEvent(
 			this.app.vault.on("modify", (file: any) => {
 				this.dataCache.clear();
-				const activeFile = this.app.workspace.getActiveFile();
-				if (activeFile && file.path === activeFile.path) {
-					this.scheduleRefresh();
+				this.processedTables = new WeakSet();
+				// Restore cells to @table: text so re-processing can find references
+				const leaf = document.querySelector('.workspace-leaf-content[data-type="markdown"]');
+				if (leaf) {
+					leaf.querySelectorAll('[data-nt-original-ref]').forEach(el => {
+						const cell = el as HTMLElement;
+						const ref = cell.getAttribute('data-nt-original-ref') || '';
+						cell.removeAttribute('data-nt-original-ref');
+						cell.classList.remove('has-subtable', 'nt-unprocessed');
+						cell.textContent = ref;
+					});
 				}
+				this.scheduleRefresh();
 			})
 		);
 
@@ -1109,6 +1118,7 @@ export default class NestedTablesPlugin extends Plugin {
 
 			for (const table of tables) {
 				if (this.processedTables.has(table)) continue;
+				if (table.closest(".nested-table-container")) continue;
 				this.processedTables.add(table);
 
 				await this.processTable(table, sourcePath, nestedCount);
@@ -1126,7 +1136,7 @@ export default class NestedTablesPlugin extends Plugin {
 		if (table.closest(".nested-table-container")) return;
 
 		table.classList.add("nt-main-table");
-		const refs: { cell: Element; wrapper: Element | null; refName: string; tableName?: string }[] = [];
+		const refs: { cell: Element; wrapper: Element | null; refName: string; tableName?: string; matchText: string }[] = [];
 
 		const rows = Array.from(table.querySelectorAll("tr"));
 		for (const row of rows) {
@@ -1139,7 +1149,7 @@ export default class NestedTablesPlugin extends Plugin {
 				if (match) {
 					const refName = (match[1] as string).trim();
 					const tableName = (match[2] || "").trim() || undefined;
-					refs.push({ cell, wrapper: cellWrapper, refName, tableName });
+					refs.push({ cell, wrapper: cellWrapper, refName, tableName, matchText: match[0] });
 				}
 			}
 		}
@@ -1149,6 +1159,7 @@ export default class NestedTablesPlugin extends Plugin {
 		for (const ref of refs) {
 			const targetEl = ref.wrapper || ref.cell;
 			targetEl.classList.add("has-subtable", "nt-unprocessed");
+			(targetEl as HTMLElement).dataset.ntOriginalRef = ref.matchText;
 			targetEl.addEventListener("dblclick", (e) => {
 				e.stopPropagation();
 				if (!targetEl.querySelector(".nested-table-container")) {
