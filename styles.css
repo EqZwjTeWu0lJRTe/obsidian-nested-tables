@@ -38,10 +38,10 @@
 }
 
 .depth-0 table { font-size: 1em; }
-.depth-1 table { font-size: 0.9em; }
-.depth-2 table { font-size: 0.85em; }
-.depth-3 table { font-size: 0.8em; }
-.depth-4 table { font-size: 0.75em; }
+.depth-1 table { font-size: 0.95em; }
+.depth-2 table { font-size: 0.9em; }
+.depth-3 table { font-size: 0.85em; }
+.depth-4 table { font-size: 0.85em; }
 
 td.has-subtable, th.has-subtable,
 .table-cell-wrapper.has-subtable {
@@ -96,9 +96,36 @@ td.has-subtable:hover, th.has-subtable:hover,
 
 .nt-unprocessed,
 .nt-unprocessed .table-cell-wrapper {
-	color: transparent;
-	font-size: 0;
+	background-color: var(--interactive-accent) !important;
+	color: var(--text-on-accent) !important;
+	border-radius: 6px;
+	cursor: pointer;
 	user-select: none;
+	vertical-align: middle;
+	animation: nt-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes nt-pulse {
+	0%, 100% { opacity: 0.65; }
+	50% { opacity: 1; }
+}
+
+.nt-unprocessed:not(.table-cell-wrapper)::before,
+.nt-unprocessed .table-cell-wrapper::before {
+	content: "📊 ";
+	font-size: var(--font-ui-small);
+}
+
+.nt-unprocessed:not(.table-cell-wrapper)::after {
+	content: " ↪";
+	font-size: var(--font-ui-small);
+	opacity: 0.7;
+}
+
+.nt-unprocessed .table-cell-wrapper::after {
+	content: " ↪";
+	font-size: var(--font-ui-small);
+	opacity: 0.7;
 }
 
 .subtable-placeholder {
@@ -223,22 +250,24 @@ td.has-subtable:hover, th.has-subtable:hover,
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	flex: 1;
-	opacity: 0;
+	opacity: 0.3;
 	transition: opacity 0.15s;
 }
 
 .nested-table-container:hover .nt-header-title {
-	opacity: 1;
+	opacity: 0.7;
 }
 
 .nt-header-buttons {
-	display: none;
+	display: flex;
 	gap: 1px;
 	flex-shrink: 0;
+	opacity: 0.4;
+	transition: opacity 0.15s;
 }
 
 .nested-table-container:hover .nt-header-buttons {
-	display: flex;
+	opacity: 1;
 }
 
 .nt-toolbar-btn {
@@ -284,4 +313,24 @@ td.has-subtable:hover, th.has-subtable:hover,
 
 .nt-file-search-create:hover {
 	background-color: var(--background-modifier-hover);
+}
+
+.nt-modal-close {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	background: none;
+	border: none;
+	font-size: 18px;
+	cursor: pointer;
+	color: var(--text-muted);
+	padding: 4px 8px;
+	border-radius: 4px;
+	line-height: 1;
+	z-index: 1;
+}
+
+.nt-modal-close:hover {
+	background-color: var(--background-modifier-hover);
+	color: var(--text-normal);
 }

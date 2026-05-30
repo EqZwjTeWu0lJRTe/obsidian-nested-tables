@@ -21,6 +21,7 @@ interface SubTableRef {
 	row: number;
 	col: number;
 	sourcePath: string;
+	tableName?: string;
 }
 
 interface TableData {
@@ -28,13 +29,19 @@ interface TableData {
 	rows: string[][];
 	subTables: SubTableRef[];
 	filePath?: string;
+	tableName?: string;
 }
 
 type NestedTableData = TableData;
 
-const SUBTABLE_REGEX = /^@table:(.+)$/;
+const SUBTABLE_REGEX = /^@table:(.+?)(?:#(.+))?$/;
+const TABLE_REGEX = /\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/g;
 
 const MAX_NESTED_TABLE_COUNT = 50;
+
+function cacheKey(name: string, tableName?: string): string {
+	return tableName ? `${name}#${tableName}` : name;
+}
 
 function escapeHtml(text: string): string {
 	const div = document.createElement("div");
@@ -47,18 +54,29 @@ async function loadNestedTable(
 	vault: Vault,
 	currentPath: string,
 	visited: Set<string>,
-	app: App
+	app: App,
+	tableName?: string
 ): Promise<NestedTableData> {
 	const headers: string[] = [];
 	const rows: string[][] = [];
 	const subTables: SubTableRef[] = [];
 
 	try {
-		const resolved = app.metadataCache.getFirstLinkpathDest(
+		let resolved = app.metadataCache.getFirstLinkpathDest(
 			sourcePath,
 			currentPath
 		);
-		if (!resolved) {
+		let resolvedPath: string | undefined;
+		if (resolved) {
+			resolvedPath = resolved.path;
+		} else {
+			// Fallback: search by basename across the vault
+			const candidates = app.vault.getMarkdownFiles().filter(f =>
+				f.basename === sourcePath || f.path === sourcePath || f.path === sourcePath + ".md"
+			);
+			if (candidates.length > 0) resolvedPath = candidates[0].path;
+		}
+		if (!resolvedPath) {
 			return {
 				headers: ["错误"],
 				rows: [[`未找到文件: ${escapeHtml(sourcePath)}`]],
@@ -66,7 +84,6 @@ async function loadNestedTable(
 			};
 		}
 
-		const resolvedPath = resolved.path;
 		if (visited.has(resolvedPath)) {
 			return {
 				headers: ["错误"],
@@ -85,10 +102,18 @@ async function loadNestedTable(
 		}
 
 		const content = await vault.read(file);
-		const tableMatch = content.match(
-			/\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/
-		);
-		if (!tableMatch) {
+
+		interface TableEntry { headers: string[]; dataLines: string[]; startIndex: number }
+		const allTables: TableEntry[] = [];
+		TABLE_REGEX.lastIndex = 0;
+		let m: RegExpExecArray | null;
+		while ((m = TABLE_REGEX.exec(content)) !== null) {
+			const hdrs = (m[1] as string).split("|").map(h => h.trim()).filter(h => h.length > 0);
+			const lines = (m[2] as string).trim().split("\n");
+			allTables.push({ headers: hdrs, dataLines: lines, startIndex: m.index });
+		}
+
+		if (allTables.length === 0) {
 			return {
 				headers: ["提示"],
 				rows: [[`${escapeHtml(sourcePath)} 中没有找到 Markdown 表格`]],
@@ -96,11 +121,50 @@ async function loadNestedTable(
 			};
 		}
 
-		const headerLine = tableMatch[1] as string;
-		const dataLines = (tableMatch[2] as string).trim().split("\n");
+		// Parse headings and map each table to its nearest preceding heading
+		const headingLines: { text: string; lineNum: number }[] = [];
+		const allLines = content.split("\n");
+		for (let i = 0; i < allLines.length; i++) {
+			const hm = allLines[i].match(/^#{1,6}\s+(.+)/);
+			if (hm) headingLines.push({ text: hm[1].trim(), lineNum: i });
+		}
 
-		const rawHeaders = headerLine.split("|").map((h) => h.trim());
-		const validHeaders = rawHeaders.filter((h) => h.length > 0);
+		function findHeadingForTable(tableStartIdx: number): string | undefined {
+			const tableLine = content.slice(0, tableStartIdx).split("\n").length - 1;
+			let best: string | undefined;
+			for (const h of headingLines) {
+				if (h.lineNum < tableLine) best = h.text;
+				else break;
+			}
+			return best;
+		}
+
+		let tableIndex = 0;
+		if (tableName) {
+			const lowerName = tableName.toLowerCase();
+			// Try matching by heading first
+			let idx = allTables.findIndex(t => {
+				const heading = findHeadingForTable(t.startIndex);
+				return heading?.toLowerCase() === lowerName;
+			});
+			// Fallback: match by table header cell
+			if (idx === -1) {
+				idx = allTables.findIndex(t =>
+					t.headers.some(h => h.toLowerCase() === lowerName)
+				);
+			}
+			if (idx === -1) {
+				return {
+					headers: ["错误"],
+					rows: [[`未找到表"${escapeHtml(tableName)}": ${escapeHtml(sourcePath)}`]],
+					subTables: [],
+				};
+			}
+			tableIndex = idx;
+		}
+
+		const { headers: rawHeaders, dataLines } = allTables[tableIndex];
+		const validHeaders = rawHeaders;
 		headers.push(...validHeaders);
 
 		const columnCount = headers.length;
@@ -114,7 +178,7 @@ async function loadNestedTable(
 
 		visited.add(resolvedPath);
 
-		const result: NestedTableData = { headers, rows, subTables, filePath: resolvedPath };
+		const result: NestedTableData = { headers, rows, subTables, filePath: resolvedPath, tableName };
 
 		for (let i = 0; i < dataLines.length; i++) {
 			const line = dataLines[i] as string;
@@ -133,11 +197,13 @@ async function loadNestedTable(
 
 				const match = cellValue.match(SUBTABLE_REGEX);
 				if (match) {
-					const refName = match[1] as string;
+					const refName = (match[1] as string).trim();
+					const refTable = (match[2] || "").trim() || undefined;
 					subTables.push({
 						row: i,
 						col: j,
 						sourcePath: refName.trim(),
+						tableName: refTable,
 					});
 				}
 			}
@@ -194,7 +260,8 @@ async function preloadEnriched(
 			vault,
 			sourcePath,
 			new Set<string>(),
-			app
+			app,
+			ref.tableName
 		).then((subData) =>
 			preloadEnriched(subData, depth + 1, sourcePath, settings, app, vault, nestedCount)
 		).then((el) => ({ col: ref.col, row: ref.row, el }));
@@ -206,6 +273,7 @@ async function preloadEnriched(
 	const headerBar = container.createDiv({ cls: "nt-header-bar" });
 	const title = headerBar.createSpan({ cls: "nt-header-title" });
 	title.textContent = data.filePath || sourcePath;
+	if (data.tableName) title.textContent += ` #${data.tableName}`;
 
 	const btnGroup = headerBar.createDiv({ cls: "nt-header-buttons" });
 
@@ -217,7 +285,7 @@ async function preloadEnriched(
 	editBtn.addEventListener("click", (e) => {
 		e.stopPropagation();
 		const filePath = data.filePath || sourcePath;
-		new NestedTableEditModal(app, filePath).open();
+		new NestedTableEditModal(app, filePath, data.tableName).open();
 	});
 
 	const openBtn = btnGroup.createEl("button", {
@@ -263,7 +331,7 @@ async function preloadEnriched(
 				td.appendChild(match.el);
 				td.addEventListener("dblclick", () => {
 					const ref = data.subTables.find((r) => r.row === i && r.col === j);
-					if (ref) handleCellDoubleClick(ref.sourcePath, app);
+					if (ref) handleCellDoubleClick(ref.sourcePath, app, ref.tableName);
 				});
 			} else {
 				renderTasks.push(
@@ -278,31 +346,54 @@ async function preloadEnriched(
 	return container;
 }
 
-function handleCellDoubleClick(sourcePath: string, app: App) {
-	new NestedTableEditModal(app, sourcePath).open();
+function handleCellDoubleClick(sourcePath: string, app: App, tableName?: string) {
+	new NestedTableEditModal(app, sourcePath, tableName).open();
 }
 
 class NestedTableEditModal extends Modal {
 	private sourcePath: string;
+	private tableName?: string;
 	private hasUnsavedChanges = false;
 	private activeFilePath: string;
+	private loadedMtime: number = 0;
+	private editingTableIndex: number = 0;
 
-	constructor(app: App, sourcePath: string) {
+	constructor(app: App, sourcePath: string, tableName?: string) {
 		super(app);
 		this.sourcePath = sourcePath;
-		this.titleEl.textContent = `编辑表格: ${sourcePath}`;
+		this.tableName = tableName;
+		this.titleEl.textContent = `编辑表格: ${sourcePath}${tableName ? ` #${tableName}` : ""}`;
 		this.activeFilePath = this.getActiveFilePath();
-	}
-
-	private getActiveFilePath(): string {
-		const file = this.app.workspace.getActiveFile();
-		return file ? file.path : "";
+		(this as any).bgEl.style.pointerEvents = "none";
 	}
 
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.classList.add("nested-table-edit-modal");
+
+		const closeBtn = contentEl.createEl("button", {
+			cls: "nt-modal-close",
+			text: "✕",
+		});
+		closeBtn.addEventListener("click", () => this.close());
+
+		contentEl.addEventListener("dragover", (e) => {
+			e.preventDefault();
+		});
+
+		contentEl.addEventListener("drop", (e) => {
+			e.preventDefault();
+			const text = e.dataTransfer?.getData("text/plain");
+			const val = text || e.dataTransfer?.files[0]?.name || "";
+			if (val) {
+				const activeInput = contentEl.querySelector("input:focus") as HTMLInputElement;
+				if (activeInput) {
+					activeInput.value += val;
+					this.hasUnsavedChanges = true;
+				}
+			}
+		});
 
 		const loadingEl = contentEl.createDiv({ text: "加载中..." });
 		this.loadTableData()
@@ -317,6 +408,11 @@ class NestedTableEditModal extends Modal {
 			});
 	}
 
+	private getActiveFilePath(): string {
+		const file = this.app.workspace.getActiveFile();
+		return file ? file.path : "";
+	}
+
 	private async loadTableData(): Promise<{
 		headers: string[];
 		rows: string[][];
@@ -324,9 +420,12 @@ class NestedTableEditModal extends Modal {
 		try {
 			let file: TFile | null = null;
 
-			if (this.sourcePath.includes("/") || this.sourcePath.endsWith(".md")) {
-				const f = this.app.vault.getAbstractFileByPath(this.sourcePath);
-				if (f instanceof TFile) file = f;
+			const exactPath = this.app.vault.getAbstractFileByPath(
+				this.sourcePath.endsWith(".md") ? this.sourcePath : this.sourcePath + ".md"
+			);
+			if (exactPath instanceof TFile) {
+				file = exactPath;
+				this.loadedMtime = file.stat.mtime;
 			} else {
 				const resolved = this.app.metadataCache.getFirstLinkpathDest(
 					this.sourcePath,
@@ -334,7 +433,16 @@ class NestedTableEditModal extends Modal {
 				);
 				if (resolved) {
 					const f = this.app.vault.getAbstractFileByPath(resolved.path);
-					if (f instanceof TFile) file = f;
+					if (f instanceof TFile) { file = f; this.loadedMtime = f.stat.mtime; }
+				}
+				if (!file) {
+					const candidates = this.app.vault.getMarkdownFiles().filter(f =>
+						f.basename === this.sourcePath
+					);
+					if (candidates.length > 0) {
+						file = candidates[0];
+						this.loadedMtime = file.stat.mtime;
+					}
 				}
 			}
 
@@ -344,19 +452,60 @@ class NestedTableEditModal extends Modal {
 			}
 
 			const content = await this.app.vault.read(file);
-			const tableMatch = content.match(
-				/\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/
-			);
-			if (!tableMatch) {
+
+			interface TableEntry { headers: string[]; dataLines: string[]; startIndex: number }
+			const allTables: TableEntry[] = [];
+			TABLE_REGEX.lastIndex = 0;
+			let m: RegExpExecArray | null;
+			while ((m = TABLE_REGEX.exec(content)) !== null) {
+				const hdrs = (m[1] as string).split("|").map(h => h.trim()).filter(h => h.length > 0);
+				const lines = (m[2] as string).trim().split("\n");
+				allTables.push({ headers: hdrs, dataLines: lines, startIndex: m.index });
+			}
+
+			if (allTables.length === 0) {
 				new Notice("文件中没有找到 Markdown 表格");
 				return null;
 			}
 
-			const headerLine = tableMatch[1] as string;
-			const dataLines = (tableMatch[2] as string).trim().split("\n");
+			const headingLines: { text: string; lineNum: number }[] = [];
+			const allLines = content.split("\n");
+			for (let i = 0; i < allLines.length; i++) {
+				const hm = allLines[i].match(/^#{1,6}\s+(.+)/);
+				if (hm) headingLines.push({ text: hm[1].trim(), lineNum: i });
+			}
 
-			const rawHeaders = headerLine.split("|").map((h) => h.trim());
-			const headers = rawHeaders.filter((h) => h.length > 0);
+			function findHeadingForTable(tableStartIdx: number): string | undefined {
+				const tableLine = content.slice(0, tableStartIdx).split("\n").length - 1;
+				let best: string | undefined;
+				for (const h of headingLines) {
+					if (h.lineNum < tableLine) best = h.text;
+					else break;
+				}
+				return best;
+			}
+
+			this.editingTableIndex = 0;
+			if (this.tableName) {
+				const lowerName = this.tableName.toLowerCase();
+				let idx = allTables.findIndex(t => {
+					const heading = findHeadingForTable(t.startIndex);
+					return heading?.toLowerCase() === lowerName;
+				});
+				if (idx === -1) {
+					idx = allTables.findIndex(t =>
+						t.headers.some(h => h.toLowerCase() === lowerName)
+					);
+				}
+				if (idx === -1) {
+					new Notice(`未找到表"${this.tableName}"`);
+					return null;
+				}
+				this.editingTableIndex = idx;
+			}
+
+			const { headers: rawHeaders, dataLines } = allTables[this.editingTableIndex];
+			const headers = [...rawHeaders];
 
 			const rows: string[][] = [];
 			for (const line of dataLines) {
@@ -533,9 +682,11 @@ class NestedTableEditModal extends Modal {
 		try {
 			let file: TFile | null = null;
 
-			if (this.sourcePath.includes("/") || this.sourcePath.endsWith(".md")) {
-				const f = this.app.vault.getAbstractFileByPath(this.sourcePath);
-				if (f instanceof TFile) file = f;
+			const exactPath = this.app.vault.getAbstractFileByPath(
+				this.sourcePath.endsWith(".md") ? this.sourcePath : this.sourcePath + ".md"
+			);
+			if (exactPath instanceof TFile) {
+				file = exactPath;
 			} else {
 				const resolved = this.app.metadataCache.getFirstLinkpathDest(
 					this.sourcePath,
@@ -545,11 +696,33 @@ class NestedTableEditModal extends Modal {
 					const f = this.app.vault.getAbstractFileByPath(resolved.path);
 					if (f instanceof TFile) file = f;
 				}
+				if (!file) {
+					const candidates = this.app.vault.getMarkdownFiles().filter(f =>
+						f.basename === this.sourcePath
+					);
+					if (candidates.length > 0) file = candidates[0];
+				}
 			}
 
 			if (!file) {
 				new Notice(`未找到文件: ${this.sourcePath}`);
 				return;
+			}
+
+			if (file.stat.mtime !== this.loadedMtime) {
+				const conflict = new Notice("文件已被外部修改，是否覆盖？点「取消」放弃更改", 0);
+				const overwrite = await new Promise<boolean>((resolve) => {
+					const noticeEl = conflict.noticeEl;
+					const cancelBtn = noticeEl.createEl("button", { text: "取消" });
+					cancelBtn.onclick = () => resolve(false);
+					const okBtn = noticeEl.createEl("button", { text: "覆盖" });
+					okBtn.onclick = () => resolve(true);
+				});
+				if (!overwrite) {
+					conflict.hide();
+					return;
+				}
+				conflict.hide();
 			}
 
 			const sepLine = "|" + headers.map(() => "---").join("|") + "|";
@@ -564,14 +737,42 @@ class NestedTableEditModal extends Modal {
 			const newTableStr = [headerLine, sepLine, ...dataLines].join("\n");
 
 			const oldContent = await this.app.vault.read(file);
-			const tableRegex = /\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/;
-			const newContent = oldContent.replace(tableRegex, newTableStr);
-			if (newContent === oldContent) {
-				new Notice("文件中没有找到 Markdown 表格");
-				return;
-			}
 
-			await this.app.vault.modify(file, newContent);
+			if (this.tableName) {
+				let newContent = "";
+				let count = 0;
+				let lastIdx = 0;
+				let replaced = false;
+				TABLE_REGEX.lastIndex = 0;
+				let m: RegExpExecArray | null;
+				while ((m = TABLE_REGEX.exec(oldContent)) !== null) {
+					newContent += oldContent.slice(lastIdx, m.index);
+					if (count === this.editingTableIndex) {
+						newContent += newTableStr;
+						replaced = true;
+					} else {
+						newContent += m[0];
+					}
+					lastIdx = TABLE_REGEX.lastIndex;
+					count++;
+				}
+				newContent += oldContent.slice(lastIdx);
+
+				if (!replaced) {
+					new Notice("文件中没有找到匹配的表格");
+					return;
+				}
+
+				await this.app.vault.modify(file, newContent);
+			} else {
+				const tableRegex = /\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/;
+				const newContent = oldContent.replace(tableRegex, newTableStr);
+				if (newContent === oldContent) {
+					new Notice("文件中没有找到 Markdown 表格");
+					return;
+				}
+				await this.app.vault.modify(file, newContent);
+			}
 
 			new Notice("保存成功");
 			this.hasUnsavedChanges = false;
@@ -758,7 +959,7 @@ export default class NestedTablesPlugin extends Plugin {
 				this.processedTables = new WeakSet();
 				this.restartMutationObserver();
 				this.preloadCurrentFile();
-				setTimeout(() => this.processAllTables(), 300);
+				setTimeout(() => this.processAllTables(), 200);
 			})
 		);
 
@@ -781,25 +982,30 @@ export default class NestedTablesPlugin extends Plugin {
 		if (!file) return;
 		try {
 			const content = await this.app.vault.read(file);
-			const tableRegex = /\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/g;
+			const refs: { name: string; tableName?: string }[] = [];
+			TABLE_REGEX.lastIndex = 0;
 			let m: RegExpExecArray | null;
-			const refNames = new Set<string>();
-			while ((m = tableRegex.exec(content)) !== null) {
+			while ((m = TABLE_REGEX.exec(content)) !== null) {
 				const dataLines = (m[2] as string).trim().split("\n");
 				for (const line of dataLines) {
 					const cells = line.split("|").map(c => c.trim());
 					for (const cell of cells) {
 						const refMatch = cell.match(SUBTABLE_REGEX);
-						if (refMatch) refNames.add(refMatch[1].trim());
+						if (refMatch) {
+							const name = refMatch[1].trim();
+							const tableName = (refMatch[2] || "").trim() || undefined;
+							refs.push({ name, tableName });
+						}
 					}
 				}
 			}
 			const visited = new Set<string>([file.path]);
-			for (const name of refNames) {
-				if (this.dataCache.has(name)) continue;
+			for (const ref of refs) {
+				const key = cacheKey(ref.name, ref.tableName);
+				if (this.dataCache.has(key)) continue;
 				try {
-					const data = await loadNestedTable(name, this.app.vault, file.path, visited, this.app);
-					this.dataCache.set(name, data);
+					const data = await loadNestedTable(ref.name, this.app.vault, file.path, visited, this.app, ref.tableName);
+					this.dataCache.set(key, data);
 					await this.cacheNested(data, file.path, new Set(visited));
 				} catch {
 					// skip
@@ -812,10 +1018,11 @@ export default class NestedTablesPlugin extends Plugin {
 
 	private async cacheNested(data: NestedTableData, sourcePath: string, visited: Set<string>) {
 		for (const ref of data.subTables) {
-			if (this.dataCache.has(ref.sourcePath)) continue;
+			const key = cacheKey(ref.sourcePath, ref.tableName);
+			if (this.dataCache.has(key)) continue;
 			try {
-				const nested = await loadNestedTable(ref.sourcePath, this.app.vault, sourcePath, visited, this.app);
-				this.dataCache.set(ref.sourcePath, nested);
+				const nested = await loadNestedTable(ref.sourcePath, this.app.vault, sourcePath, visited, this.app, ref.tableName);
+				this.dataCache.set(key, nested);
 				await this.cacheNested(nested, sourcePath, visited);
 			} catch {
 				// skip
@@ -880,7 +1087,7 @@ export default class NestedTablesPlugin extends Plugin {
 		this.refreshTimeout = window.setTimeout(() => {
 			this.refreshTimeout = null;
 			this.processAllTables();
-		}, 500);
+		}, 200);
 	}
 
 	private async processAllTables() {
@@ -919,7 +1126,7 @@ export default class NestedTablesPlugin extends Plugin {
 		if (table.closest(".nested-table-container")) return;
 
 		table.classList.add("nt-main-table");
-		const refs: { cell: Element; wrapper: Element | null; refName: string }[] = [];
+		const refs: { cell: Element; wrapper: Element | null; refName: string; tableName?: string }[] = [];
 
 		const rows = Array.from(table.querySelectorAll("tr"));
 		for (const row of rows) {
@@ -931,7 +1138,8 @@ export default class NestedTablesPlugin extends Plugin {
 				const match = text.match(SUBTABLE_REGEX);
 				if (match) {
 					const refName = (match[1] as string).trim();
-					refs.push({ cell, wrapper: cellWrapper, refName });
+					const tableName = (match[2] || "").trim() || undefined;
+					refs.push({ cell, wrapper: cellWrapper, refName, tableName });
 				}
 			}
 		}
@@ -941,14 +1149,21 @@ export default class NestedTablesPlugin extends Plugin {
 		for (const ref of refs) {
 			const targetEl = ref.wrapper || ref.cell;
 			targetEl.classList.add("has-subtable", "nt-unprocessed");
+			targetEl.addEventListener("dblclick", (e) => {
+				e.stopPropagation();
+				if (!targetEl.querySelector(".nested-table-container")) {
+					handleCellDoubleClick(ref.refName, this.app, ref.tableName);
+				}
+			});
 		}
 
 		const loaded = await Promise.all(
 			refs.map((ref) => {
-				const cached = this.dataCache.get(ref.refName);
+				const key = cacheKey(ref.refName, ref.tableName);
+				const cached = this.dataCache.get(key);
 				const dataPromise = cached
 					? Promise.resolve(cached)
-					: loadNestedTable(ref.refName, this.app.vault, sourcePath, new Set<string>(), this.app);
+					: loadNestedTable(ref.refName, this.app.vault, sourcePath, new Set<string>(), this.app, ref.tableName);
 				return dataPromise.then(async (subData) => {
 					nestedCount.count++;
 					const enriched = await preloadEnriched(
