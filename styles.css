@@ -270,6 +270,11 @@ td.has-subtable:hover, th.has-subtable:hover,
 	opacity: 1;
 }
 
+/* 阅读模式隐藏工具按钮 */
+.markdown-preview-view .nt-header-buttons {
+	display: none;
+}
+
 .nt-toolbar-btn {
 	background: none;
 	border: none;
